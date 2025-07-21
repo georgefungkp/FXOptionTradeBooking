@@ -93,7 +93,7 @@ public class TradeServiceImpl implements TradeService {
             // Step 4: Check for duplicate trade reference (ensures uniqueness)
             validateUniqueTradeReference(request.getTradeReference());
 
-            // Step 5: Create and populate trade entity (maps request to entity with normalization)
+            // Step 5: Create and populate trade entity (maps request to entity)
             Trade trade = createTradeEntity(request, counterparty);
 
             // Step 6: Apply business logic (calculate premium if not provided, apply risk adjustments)
@@ -270,7 +270,7 @@ public class TradeServiceImpl implements TradeService {
             throw new BusinessValidationException("Start date and end date are required");
         }
 
-        // Ensure date range is valid (start before end)
+        // Ensure the date range is valid (start before end)
         if (startDate.isAfter(endDate)) {
             throw new BusinessValidationException("Start date cannot be after end date");
         }
@@ -391,13 +391,13 @@ public class TradeServiceImpl implements TradeService {
         Trade trade = tradeRepository.findById(tradeId)
             .orElseThrow(() -> new TradeNotFoundException("Trade not found with ID: " + tradeId));
 
-        // Investment banks typically only allow cancellation of pending trades
+        // only allow cancellation of pending trades
         // This prevents cancelling trades that have already been processed or settled
         if (trade.getStatus() != TradeStatus.PENDING) {
             throw new BusinessValidationException("Cannot cancel trade in status: " + trade.getStatus());
         }
 
-        // Check if trade is still within cancellation window (same business day)
+        // Check if trade is still within a cancellation window (same business day)
         // This is a standard market practice to limit cancellations to the trade date
         if (!trade.getTradeDate().equals(LocalDate.now())) {
             throw new BusinessValidationException("Cannot cancel trade after trade date");
@@ -463,7 +463,6 @@ public class TradeServiceImpl implements TradeService {
             throw new BusinessValidationException("Counterparty ID is required");
         }
 
-        // Additional pre-trade checks can be added here
         log.debug("Pre-trade validation completed for trade reference: {}", request.getTradeReference());
     }
 
@@ -471,7 +470,7 @@ public class TradeServiceImpl implements TradeService {
         Counterparty counterparty = counterpartyRepository.findById(counterpartyId)
             .orElseThrow(() -> new BusinessValidationException("Counterparty not found with ID: " + counterpartyId));
 
-        // Investment bank validation: counterparty must be active
+        //counterparty must be active
         if (!counterparty.getIsActive()) {
             throw new BusinessValidationException("Cannot trade with inactive counterparty: " + counterparty.getName());
         }
@@ -551,9 +550,9 @@ public class TradeServiceImpl implements TradeService {
             BigDecimal calculatedPremium = calculateDefaultPremium(trade);
             trade.setPremiumAmount(calculatedPremium);
 
-            // Set premium currency to quote currency if not specified
+            // Set premium currency to base currency if not specified
             if (trade.getPremiumCurrency() == null) {
-                trade.setPremiumCurrency(trade.getQuoteCurrency());
+                trade.setPremiumCurrency(trade.getBaseCurrency());
             }
 
             log.info("Calculated default premium: {} {} for trade: {}",
@@ -565,7 +564,7 @@ public class TradeServiceImpl implements TradeService {
 
     /**
      * Calculates a default premium for an option trade when not provided by the user.
-     * 
+     * <p>
      * This is a simplified calculation for demonstration purposes. In a real trading system,
      * this would use sophisticated option pricing models such as Black-Scholes or
      * Monte Carlo simulations that would factor in:
@@ -575,7 +574,7 @@ public class TradeServiceImpl implements TradeService {
      * - Time to maturity
      * - Strike price vs. spot price
      * - Option type (call/put)
-     * 
+     * <p>
      * The current implementation uses a simple percentage of notional adjusted for tenor.
      *
      * @param trade The trade for which to calculate the premium
@@ -605,7 +604,7 @@ public class TradeServiceImpl implements TradeService {
             premiumRate = premiumRate.multiply(new BigDecimal("0.5")); 
         }
 
-        // Calculate final premium amount based on notional and adjusted rate
+        // Calculate the final premium amount based on notional and adjusted rate
         return TradeCalculationUtils.calculatePremium(trade.getNotionalAmount(), premiumRate);
     }
 
@@ -630,9 +629,14 @@ public class TradeServiceImpl implements TradeService {
         }
     }
 
+    /**
+     * Handles post-trade processing activities, including notifications for large trades and
+     * preparation for regulatory reporting.
+     *
+     * @param trade the trade object containing information about the executed trade,
+     *              including notional amount, trade details, and counterparty information
+     */
     private void performPostTradeProcessing(Trade trade) {
-        // Investment bank post-trade processing
-
         // 1. Risk management notifications for large trades
         if (trade.getNotionalAmount().compareTo(new BigDecimal("50000000")) > 0) {
             log.warn("Large trade notification - Trade ID: {}, Notional: {} {}",

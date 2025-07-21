@@ -22,7 +22,7 @@ import java.math.RoundingMode;
      * <p>
      * This method implements a simple premium calculation:
      *   Premium = Notional Amount × Premium Rate
-     * 
+     * <p>
      * The result is rounded to 2 decimal places using HALF_UP rounding,
      * following standard financial rounding conventions for monetary amounts.
      * 
@@ -39,16 +39,16 @@ import java.math.RoundingMode;
 
     /**
      * Calculates the profit and loss (PnL) for an FX option position.
-     * 
+     * <p>
      * This method provides a simplified PnL calculation for an option position
      * based on the difference between the current market rate and the strike price,
      * multiplied by the notional amount.
-     * 
+     * <p>
      * For a complete implementation, this would need to factor in:
      * - Option type (call/put) which determines profit direction
      * - Premium paid/received
      * - Whether the option is exercised or not
-     * 
+     * <p>
      * The result is rounded to 2 decimal places using HALF_UP rounding,
      * following standard financial rounding conventions.
      * 

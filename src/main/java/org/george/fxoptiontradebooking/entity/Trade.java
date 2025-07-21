@@ -53,7 +53,11 @@ public class Trade {
     
     @Column(name = "trade_date", nullable = false)
     private LocalDate tradeDate;
-    
+
+    /**
+     * This is the **date on which the trade is settled**, meaning the actual delivery or payment between parties occurs.
+     * It is often a few days after the `tradeDate`, depending on the nature of the trade, market conventions, or settlement cycles.
+     **/
     @Column(name = "value_date", nullable = false)
     private LocalDate valueDate;
     
