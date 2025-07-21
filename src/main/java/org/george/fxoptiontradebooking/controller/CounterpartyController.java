@@ -8,6 +8,7 @@ import org.george.fxoptiontradebooking.dto.response.CounterpartyResponse;
 import org.george.fxoptiontradebooking.service.CounterpartyService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -31,11 +32,14 @@ public class CounterpartyController {
     /**
      * Creates a new counterparty in the system.
      * 
+     * Access: ADMIN role only (sensitive master data operation)
+     * 
      * @param request The validated counterparty information
      * @return HTTP 201 Created with the newly created counterparty data
      * @throws org.george.fxoptiontradebooking.exception.BusinessValidationException if validation fails
      */
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<CounterpartyResponse>> createCounterparty(@Valid @RequestBody CounterpartyRequest request) {
         CounterpartyResponse response = counterpartyService.createCounterparty(request);
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -45,11 +49,14 @@ public class CounterpartyController {
     /**
      * Retrieves a counterparty by its unique ID.
      * 
+     * Access: USER, TRADER and ADMIN roles (read access for trading operations)
+     * 
      * @param counterpartyId The ID of the counterparty to retrieve
      * @return HTTP 200 OK with the counterparty data if found
      * @throws org.george.fxoptiontradebooking.exception.TradeNotFoundException if counterparty doesn't exist
      */
     @GetMapping("/{counterpartyId}")
+    @PreAuthorize("hasRole('USER') or hasRole('TRADER') or hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<CounterpartyResponse>> getCounterpartyById(@PathVariable Long counterpartyId) {
         CounterpartyResponse response = counterpartyService.getCounterpartyById(counterpartyId);
         return ResponseEntity.ok(ApiResponse.success(response));
@@ -64,6 +71,7 @@ public class CounterpartyController {
      * @throws org.george.fxoptiontradebooking.exception.BusinessValidationException if code is invalid
      */
     @GetMapping("/code/{counterpartyCode}")
+    @PreAuthorize("hasRole('USER') or hasRole('TRADER') or hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<CounterpartyResponse>> getCounterpartyByCode(@PathVariable String counterpartyCode) {
         CounterpartyResponse response = counterpartyService.getCounterpartyByCode(counterpartyCode);
         return ResponseEntity.ok(ApiResponse.success(response));
@@ -75,6 +83,7 @@ public class CounterpartyController {
      * @return HTTP 200 OK with a list of all counterparties (active and inactive)
      */
     @GetMapping
+    @PreAuthorize("hasRole('TRADER') or hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<List<CounterpartyResponse>>> getAllCounterparties() {
         List<CounterpartyResponse> responses = counterpartyService.getAllCounterparties();
         return ResponseEntity.ok(ApiResponse.success(responses));
@@ -86,6 +95,7 @@ public class CounterpartyController {
      * @return HTTP 200 OK with a list of active counterparties
      */
     @GetMapping("/active")
+    @PreAuthorize("hasRole('USER') or hasRole('TRADER') or hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<List<CounterpartyResponse>>> getAllActiveCounterparties() {
         List<CounterpartyResponse> responses = counterpartyService.getAllActiveCounterparties();
         return ResponseEntity.ok(ApiResponse.success(responses));

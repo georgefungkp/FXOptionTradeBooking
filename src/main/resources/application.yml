@@ -9,6 +9,9 @@ spring:
     driverClassName: org.h2.Driver
     username: sa
     password: 
+# ✅ ADD THESE 2 LINES TO DISABLE SECURITY
+#  autoconfigure:
+#    exclude: org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
 
 # JPA Configuration
 jpa:
@@ -38,7 +41,7 @@ jwt:
 security:
   user:
     name: admin
-    password: 
+    password:
     roles: ADMIN
 
 # Logging Configuration

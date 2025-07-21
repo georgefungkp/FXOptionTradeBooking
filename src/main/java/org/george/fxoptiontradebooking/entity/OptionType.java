@@ -1,5 +1,8 @@
 package org.george.fxoptiontradebooking.entity;
 
+import lombok.Getter;
+
+@Getter
 public enum OptionType {
     CALL("Call Option"),
     PUT("Put Option");
@@ -9,8 +12,5 @@ public enum OptionType {
     OptionType(String displayName) {
         this.displayName = displayName;
     }
-    
-    public String getDisplayName() {
-        return displayName;
-    }
+
 }
