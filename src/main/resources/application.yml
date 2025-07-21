@@ -1,0 +1,51 @@
+# ================================================
+# FX Option Trade Booking System Configuration
+# ================================================
+
+# Database Configuration
+spring:
+  datasource:
+    url: jdbc:h2:mem:fxtradedb
+    driverClassName: org.h2.Driver
+    username: sa
+    password: 
+
+# JPA Configuration
+jpa:
+  database-platform: org.hibernate.dialect.H2Dialect
+  hibernate:
+    ddl-auto: create-drop # Creates schema and drops on application shutdown
+    show-sql: true        # Shows generated SQL in logs
+    properties:
+      hibernate.format_sql: true # Formats SQL for better readability
+
+# H2 Console Configuration
+h2:
+  console:
+    enabled: true            # Enables H2 web console
+    path: /h2-console        # Path to access H2 console
+
+# Server Configuration
+server:
+  port: 8080                # Application port
+
+# JWT Configuration
+jwt:
+  secret: mySecretKey123456789012345678901234567890123456789012345678901234567890
+  expiration: 86400000      # 24 hours in milliseconds
+
+# Security Configuration
+security:
+  user:
+    name: admin
+    password: 
+    roles: ADMIN
+
+# Logging Configuration
+logging:
+  level:
+    org:
+      george:
+        fxoptiontradebooking: DEBUG
+    org.springframework.web: DEBUG
+    org.springframework.security: DEBUG
