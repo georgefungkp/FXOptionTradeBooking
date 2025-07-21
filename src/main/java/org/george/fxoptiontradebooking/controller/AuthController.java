@@ -1,5 +1,7 @@
 package org.george.fxoptiontradebooking.controller;
 
+import lombok.Getter;
+import lombok.Setter;
 import org.george.fxoptiontradebooking.security.JwtTokenUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -53,7 +55,10 @@ public class AuthController {
         }
     }
 
+    @Setter
+    @Getter
     public static class JwtRequest {
+        // Getters and Setters
         private String username;
         private String password;
 
@@ -65,10 +70,5 @@ public class AuthController {
             this.password = password;
         }
 
-        // Getters and Setters
-        public String getUsername() { return username; }
-        public void setUsername(String username) { this.username = username; }
-        public String getPassword() { return password; }
-        public void setPassword(String password) { this.password = password; }
     }
 }

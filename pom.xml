@@ -34,7 +34,7 @@
     </scm>
     <properties>
         <!-- Java version requirement for the project -->
-        <java.version>21</java.version>
+        <java.version>22</java.version>
     </properties>
     <dependencies>
         <!-- Spring Security for authentication and authorization -->
@@ -181,13 +181,6 @@
                         </configuration>
                     </execution>
                 </executions>
-                <dependencies>
-                    <dependency>
-                        <groupId>org.springframework.restdocs</groupId>
-                        <artifactId>spring-restdocs-asciidoctor</artifactId>
-                        <version>${spring-restdocs.version}</version>
-                    </dependency>
-                </dependencies>
             </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>

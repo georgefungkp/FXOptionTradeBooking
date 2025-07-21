@@ -13,13 +13,13 @@ import java.math.RoundingMode;
  * All calculations follow financial industry conventions for precision and rounding,
  * using BigDecimal to ensure accuracy in monetary calculations.
  */
-    
+ public class TradeCalculationUtils{
     /**
      * Calculates the premium amount for an FX option trade.
-     * 
+     * <p>
      * The premium is the price paid by the option buyer to the option seller,
      * typically calculated as a percentage (premium rate) of the notional amount.
-     * 
+     * <p>
      * This method implements a simple premium calculation:
      *   Premium = Notional Amount × Premium Rate
      * 
