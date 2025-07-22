@@ -1,6 +1,6 @@
 # **FX Option Trade Booking System**
 
-A comprehensive Spring Boot application designed for managing Foreign Exchange (FX) option trade bookings in investment banking and financial services. This system provides secure, scalable, and robust trade management capabilities with enterprise-grade features.
+A comprehensive Spring Boot application designed for managing Foreign Exchange (FX) option trade bookings in investment banking and financial services. This system provides secure, scalable, and robust trade management capabilities with enterprise-grade features and comprehensive observability.
 
 ## Developer Information
 
@@ -28,6 +28,14 @@ A comprehensive Spring Boot application designed for managing Foreign Exchange (
 - **Search & Filtering**: Advanced search capabilities by counterparty, status, date ranges
 - **Premium Calculations**: Automatic FX option premium calculations
 
+### **Observability & Monitoring** 🔍
+- **Distributed Tracing**: OpenTelemetry integration with Jaeger for request flow visualization
+- **Custom Span Creation**: `@Observed` annotations for business logic tracing
+- **Metrics Collection**: Prometheus metrics for performance monitoring
+- **Application Monitoring**: Spring Boot Actuator endpoints for health checks
+- **Trace Context Propagation**: Complete request tracing across all components
+- **Custom Attributes**: Rich span metadata for business operations
+
 ### **Data Validation & Business Rules**
 - **Currency Validation**: ISO currency code validation with support for major global currencies
 - **Amount Validation**: Minimum/maximum notional amounts (10K to 1B) with precision control
@@ -52,6 +60,15 @@ A comprehensive Spring Boot application designed for managing Foreign Exchange (
 - **Spring Security 6.5.1** - Advanced security framework
 - **Spring Data JPA 3.5.1** - Data persistence and repository abstraction
 - **Spring Data REST** - Restful web services automation
+- **Spring AOP** - Aspect-oriented programming for cross-cutting concerns
+
+### **Observability Stack** 📊
+- **OpenTelemetry 1.49.0** - Cloud-native observability framework
+- **Micrometer Tracing** - Application metrics and tracing abstraction
+- **Micrometer Observation** - `@Observed` annotation support for custom spans
+- **Prometheus Metrics** - Time-series metrics collection and export
+- **Spring Boot Actuator** - Production-ready monitoring and management
+- **Jaeger Tracing** - Distributed tracing UI and analysis
 
 ### **Database & Persistence**
 - **Hibernate 6.6.18** - Advanced ORM with Jakarta persistence
@@ -84,26 +101,7 @@ A comprehensive Spring Boot application designed for managing Foreign Exchange (
 - **Entities**: JPA entities with proper relationships and constraints
 - **Security**: JWT-based authentication with method-level authorization
 - **Validation**: Multi-layered validation with custom business rules
-
-
-## **Business Domain Models**
-
-### **Core Entities**
-
-- **Trade**: Complete FX option trade with pricing, dates, and lifecycle management
-- **Counterparty**: Trading partners with risk ratings and compliance status  
-- **User**: System users with role-based permissions
-- **OptionType**: CALL/PUT option specifications
-- **TradeStatus**: Complete trade lifecycle states
-
-### **Key Business Rules**
-
-- **Trade Validation**: Strike price, notional amount, and date validations
-- **Counterparty Verification**: Active status and credit limit checks
-- **Status Transitions**: Controlled trade lifecycle management
-- **Risk Controls**: Position limits and exposure monitoring
-
-## **Security Implementation**
+- **Observability**: Comprehensive monitoring and tracing infrastructure
 
 ### **Authentication Flow**
 1. User credentials validation
