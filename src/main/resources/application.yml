@@ -2,8 +2,10 @@
 # FX Option Trade Booking System Configuration
 # ================================================
 
-# Database Configuration
 spring:
+  application:
+    name: fx-option-trade-booking  # This will be your service name in Jaeger
+  # Database Configuration
   datasource:
     url: jdbc:h2:mem:fxtradedb
     driverClassName: org.h2.Driver
@@ -14,19 +16,19 @@ spring:
 #    exclude: org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
 
 # JPA Configuration
-jpa:
-  database-platform: org.hibernate.dialect.H2Dialect
-  hibernate:
-    ddl-auto: create-drop # Creates schema and drops on application shutdown
-    show-sql: true        # Shows generated SQL in logs
-    properties:
-      hibernate.format_sql: true # Formats SQL for better readability
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop # Creates schema and drops on application shutdown
+      show-sql: true        # Shows generated SQL in logs
+      properties:
+        hibernate.format_sql: true # Formats SQL for better readability
 
 # H2 Console Configuration
-h2:
-  console:
-    enabled: true            # Enables H2 web console
-    path: /h2-console        # Path to access H2 console
+  h2:
+    console:
+      enabled: true            # Enables H2 web console
+      path: /h2-console        # Path to access H2 console
 
 # Server Configuration
 server:
@@ -44,7 +46,33 @@ security:
     password:
     roles: ADMIN
 
-# Logging Configuration
+# OpenTelemetry & Observability Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,tracing
+  endpoint:
+    health:
+      show-details: always
+  tracing:
+    sampling:
+      probability: 1.0  # 100% sampling for development (reduce in production)
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: fx-option-trade-booking
+      version: 0.0.1-SNAPSHOT
+      environment: development
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces  # OTLP HTTP endpoint
+    metrics:
+      endpoint: http://localhost:4318/v1/metrics
+
+# Logging Configuration with Trace ID
 logging:
   level:
     org:
@@ -52,3 +80,7 @@ logging:
         fxoptiontradebooking: DEBUG
     org.springframework.web: DEBUG
     org.springframework.security: DEBUG
+    io.micrometer.tracing: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{traceId:-},%X{spanId:-}] %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{traceId:-},%X{spanId:-}] %logger{36} - %msg%n"

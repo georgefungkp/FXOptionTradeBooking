@@ -1,5 +1,8 @@
 package org.george.fxoptiontradebooking.controller;
 
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.trace.Span;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.george.fxoptiontradebooking.dto.request.TradeBookingRequest;
@@ -13,6 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import io.micrometer.observation.annotation.Observed;
 
 import java.util.List;
 
@@ -41,6 +45,16 @@ public class TradeController {
      */
     @PostMapping
     @PreAuthorize("hasRole('TRADER') or hasRole('ADMIN')")
+    @Observed(
+        name = "trade.book",
+        contextualName = "book-new-trade",
+        lowCardinalityKeyValues = {
+            "operation", "create",
+            "resource", "trade",
+            "endpoint", "/api/trades",
+            "method", "POST"
+        }
+    )
     public ResponseEntity<ApiResponse<TradeResponse>> bookTrade(@Valid @RequestBody TradeBookingRequest request) {
         TradeResponse response = tradeService.bookTrade(request);
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -117,8 +131,27 @@ public class TradeController {
      * @return HTTP 200 OK with a page of trades according to pagination parameters
      */
     @GetMapping
+    @Observed(
+        name = "trade.list",
+        contextualName = "get-all-trades-paginated",
+        lowCardinalityKeyValues = {
+        "operation", "read",
+        "resource", "trade",
+        "endpoint", "/api/trades",
+        "method", "GET",
+        "type", "paginated"
+        }
+    )
     @PreAuthorize("hasRole('USER') or hasRole('TRADER') or hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<Page<TradeResponse>>> getAllTrades(Pageable pageable) {
+        Span currentSpan = Span.current();
+        if (currentSpan.getSpanContext().isValid()) {
+            currentSpan.setAllAttributes(Attributes.of(
+                AttributeKey.longKey("page.number"), (long) pageable.getPageNumber(),
+                AttributeKey.longKey("page.size"), (long) pageable.getPageSize(),
+                AttributeKey.stringKey("page.sort"), pageable.getSort().toString()
+            ));
+        }
         Page<TradeResponse> responses = tradeService.getAllTrades(pageable);
         return ResponseEntity.ok(ApiResponse.success(responses));
     }
