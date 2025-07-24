@@ -13,9 +13,7 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -34,7 +32,7 @@ public class DataInitializer implements CommandLineRunner {
     private final CounterpartyRepository counterpartyRepository;
 
     @Override
-    public void run(String... args) throws Exception {
+    public void run(String... args) {
         log.info("Starting data initialization...");
         
         if (userRepository.count() == 0) {
@@ -114,7 +112,7 @@ public class DataInitializer implements CommandLineRunner {
     }
 
     private void createVanillaOptions(List<Counterparty> counterparties) {
-        List<Trade> vanillaOptions = List.of(
+        List<VanillaOptionTrade> vanillaOptions = List.of(
             createVanillaOption("VO-EUR-USD-001", counterparties.get(0), OptionType.CALL, 
                 "EUR", "USD", new BigDecimal("1000000"), new BigDecimal("1.1000"), 
                 new BigDecimal("1.0950"), LocalDate.now().plusDays(30)),
@@ -130,31 +128,35 @@ public class DataInitializer implements CommandLineRunner {
         tradeRepository.saveAll(vanillaOptions);
     }
 
-    private Trade createVanillaOption(String reference, Counterparty counterparty, OptionType optionType,
-                                     String baseCurrency, String quoteCurrency, BigDecimal notional,
-                                     BigDecimal strike, BigDecimal spot, LocalDate maturity) {
-        Trade trade = new Trade();
+    private VanillaOptionTrade createVanillaOption(String reference, Counterparty counterparty, OptionType optionType,
+                                                  String baseCurrency, String quoteCurrency, BigDecimal notional,
+                                                  BigDecimal strike, BigDecimal spot, LocalDate maturity) {
+        VanillaOptionTrade trade = new VanillaOptionTrade();
+        
+        // Set common trade fields
         trade.setTradeReference(reference);
         trade.setCounterparty(counterparty);
-        trade.setProductType(ProductType.VANILLA_OPTION);
-        trade.setOptionType(optionType);
         trade.setBaseCurrency(baseCurrency);
         trade.setQuoteCurrency(quoteCurrency);
         trade.setNotionalAmount(notional);
-        trade.setStrikePrice(strike);
-        trade.setSpotRate(spot);
         trade.setTradeDate(LocalDate.now());
         trade.setValueDate(LocalDate.now().plusDays(2));
         trade.setMaturityDate(maturity);
-        trade.setPremiumAmount(notional.multiply(new BigDecimal("0.025"))); // 2.5% premium
-        trade.setPremiumCurrency(baseCurrency);
         trade.setStatus(TradeStatus.CONFIRMED);
         trade.setCreatedBy("trader1");
+        
+        // Set option-specific fields
+        trade.setOptionType(optionType);
+        trade.setStrikePrice(strike);
+        trade.setSpotRate(spot);
+        trade.setPremiumAmount(notional.multiply(new BigDecimal("0.025"))); // 2.5% premium
+        trade.setPremiumCurrency(baseCurrency);
+        
         return trade;
     }
 
     private void createExoticOptions(List<Counterparty> counterparties) {
-        List<Trade> exoticOptions = List.of(
+        List<ExoticOptionTrade> exoticOptions = List.of(
             createBarrierOption("EO-BARRIER-001", counterparties.get(0)),
             createAsianOption("EO-ASIAN-002", counterparties.get(1)),
             createDigitalOption("EO-DIGITAL-003", counterparties.get(2))
@@ -162,45 +164,96 @@ public class DataInitializer implements CommandLineRunner {
         tradeRepository.saveAll(exoticOptions);
     }
 
-    private Trade createBarrierOption(String reference, Counterparty counterparty) {
-        Trade trade = createVanillaOption(reference, counterparty, OptionType.CALL,
-            "EUR", "USD", new BigDecimal("1500000"), new BigDecimal("1.1200"),
-            new BigDecimal("1.1000"), LocalDate.now().plusDays(90));
+    private ExoticOptionTrade createBarrierOption(String reference, Counterparty counterparty) {
+        ExoticOptionTrade trade = new ExoticOptionTrade();
         
-        trade.setProductType(ProductType.EXOTIC_OPTION);
+        // Set common trade fields
+        trade.setTradeReference(reference);
+        trade.setCounterparty(counterparty);
+        trade.setBaseCurrency("EUR");
+        trade.setQuoteCurrency("USD");
+        trade.setNotionalAmount(new BigDecimal("1500000"));
+        trade.setTradeDate(LocalDate.now());
+        trade.setValueDate(LocalDate.now().plusDays(2));
+        trade.setMaturityDate(LocalDate.now().plusDays(90));
+        trade.setStatus(TradeStatus.CONFIRMED);
+        trade.setCreatedBy("trader1");
+        
+        // Set option fields
+        trade.setOptionType(OptionType.CALL);
+        trade.setStrikePrice(new BigDecimal("1.1200"));
+        trade.setSpotRate(new BigDecimal("1.1000"));
+        trade.setPremiumAmount(trade.getNotionalAmount().multiply(new BigDecimal("0.015"))); // Lower premium due to barrier
+        trade.setPremiumCurrency("EUR");
+        
+        // Set exotic-specific fields
         trade.setExoticOptionType(ExoticOptionType.BARRIER_OPTION);
         trade.setBarrierLevel(new BigDecimal("1.1500")); // Knock-out barrier
-        trade.setKnockInOut("OUT");
+        trade.setKnockInOut("KNOCK_OUT");
         trade.setObservationFrequency("CONTINUOUS");
-        trade.setPremiumAmount(trade.getNotionalAmount().multiply(new BigDecimal("0.015"))); // Lower premium due to barrier
+        
         return trade;
     }
 
-    private Trade createAsianOption(String reference, Counterparty counterparty) {
-        Trade trade = createVanillaOption(reference, counterparty, OptionType.PUT,
-            "GBP", "JPY", new BigDecimal("800000"), new BigDecimal("140.00"),
-            new BigDecimal("141.50"), LocalDate.now().plusDays(120));
+    private ExoticOptionTrade createAsianOption(String reference, Counterparty counterparty) {
+        ExoticOptionTrade trade = new ExoticOptionTrade();
         
-        trade.setProductType(ProductType.EXOTIC_OPTION);
+        // Set common trade fields
+        trade.setTradeReference(reference);
+        trade.setCounterparty(counterparty);
+        trade.setBaseCurrency("GBP");
+        trade.setQuoteCurrency("JPY");
+        trade.setNotionalAmount(new BigDecimal("800000"));
+        trade.setTradeDate(LocalDate.now());
+        trade.setValueDate(LocalDate.now().plusDays(2));
+        trade.setMaturityDate(LocalDate.now().plusDays(120));
+        trade.setStatus(TradeStatus.CONFIRMED);
+        trade.setCreatedBy("trader1");
+        
+        // Set option fields
+        trade.setOptionType(OptionType.PUT);
+        trade.setStrikePrice(new BigDecimal("140.00"));
+        trade.setSpotRate(new BigDecimal("141.50"));
+        trade.setPremiumAmount(trade.getNotionalAmount().multiply(new BigDecimal("0.020")));
+        trade.setPremiumCurrency("GBP");
+        
+        // Set exotic-specific fields
         trade.setExoticOptionType(ExoticOptionType.ASIAN_OPTION);
         trade.setObservationFrequency("DAILY");
-        trade.setPremiumAmount(trade.getNotionalAmount().multiply(new BigDecimal("0.020")));
+        
         return trade;
     }
 
-    private Trade createDigitalOption(String reference, Counterparty counterparty) {
-        Trade trade = createVanillaOption(reference, counterparty, OptionType.CALL,
-            "USD", "CHF", new BigDecimal("1200000"), new BigDecimal("0.9200"),
-            new BigDecimal("0.9150"), LocalDate.now().plusDays(30));
+    private ExoticOptionTrade createDigitalOption(String reference, Counterparty counterparty) {
+        ExoticOptionTrade trade = new ExoticOptionTrade();
         
-        trade.setProductType(ProductType.EXOTIC_OPTION);
-        trade.setExoticOptionType(ExoticOptionType.DIGITAL_OPTION);
+        // Set common trade fields
+        trade.setTradeReference(reference);
+        trade.setCounterparty(counterparty);
+        trade.setBaseCurrency("USD");
+        trade.setQuoteCurrency("CHF");
+        trade.setNotionalAmount(new BigDecimal("1200000"));
+        trade.setTradeDate(LocalDate.now());
+        trade.setValueDate(LocalDate.now().plusDays(2));
+        trade.setMaturityDate(LocalDate.now().plusDays(30));
+        trade.setStatus(TradeStatus.CONFIRMED);
+        trade.setCreatedBy("trader1");
+        
+        // Set option fields
+        trade.setOptionType(OptionType.CALL);
+        trade.setStrikePrice(new BigDecimal("0.9200"));
+        trade.setSpotRate(new BigDecimal("0.9150"));
         trade.setPremiumAmount(new BigDecimal("50000")); // Fixed payout for digital
+        trade.setPremiumCurrency("USD");
+        
+        // Set exotic-specific fields
+        trade.setExoticOptionType(ExoticOptionType.DIGITAL_OPTION);
+        
         return trade;
     }
 
     private void createFXContracts(List<Counterparty> counterparties) {
-        List<Trade> fxContracts = List.of(
+        List<FXTrade> fxContracts = List.of(
             createFXSpot("FX-SPOT-001", counterparties.get(3)),
             createFXForward("FX-FWD-002", counterparties.get(4)),
             createFXForward("FX-FWD-003", counterparties.get(5))
@@ -208,42 +261,53 @@ public class DataInitializer implements CommandLineRunner {
         tradeRepository.saveAll(fxContracts);
     }
 
-    private Trade createFXSpot(String reference, Counterparty counterparty) {
-        Trade trade = new Trade();
+    private FXTrade createFXSpot(String reference, Counterparty counterparty) {
+        FXTrade trade = new FXTrade();
+        
+        // Set common trade fields
         trade.setTradeReference(reference);
         trade.setCounterparty(counterparty);
-        trade.setProductType(ProductType.FX_SPOT);
         trade.setBaseCurrency("EUR");
         trade.setQuoteCurrency("USD");
         trade.setNotionalAmount(new BigDecimal("5000000"));
-        trade.setSpotRate(new BigDecimal("1.0980"));
         trade.setTradeDate(LocalDate.now());
         trade.setValueDate(LocalDate.now().plusDays(2));
         trade.setStatus(TradeStatus.CONFIRMED);
         trade.setCreatedBy("trader2");
+        
+        // Set FX-specific fields
+        trade.setSpotRate(new BigDecimal("1.0980"));
+        trade.setForwardRate(new BigDecimal("1.0980")); // Same as spot for spot trades
+        trade.setIsSpotTrade(true);
+        
         return trade;
     }
 
-    private Trade createFXForward(String reference, Counterparty counterparty) {
-        Trade trade = new Trade();
+    private FXTrade createFXForward(String reference, Counterparty counterparty) {
+        FXTrade trade = new FXTrade();
+        
+        // Set common trade fields
         trade.setTradeReference(reference);
         trade.setCounterparty(counterparty);
-        trade.setProductType(ProductType.FX_FORWARD);
         trade.setBaseCurrency("GBP");
         trade.setQuoteCurrency("USD");
         trade.setNotionalAmount(new BigDecimal("3000000"));
-        trade.setForwardRate(new BigDecimal("1.2750"));
-        trade.setSpotRate(new BigDecimal("1.2700"));
         trade.setTradeDate(LocalDate.now());
         trade.setValueDate(LocalDate.now().plusDays(2));
         trade.setMaturityDate(LocalDate.now().plusDays(180));
         trade.setStatus(TradeStatus.CONFIRMED);
         trade.setCreatedBy("trader1");
+        
+        // Set FX-specific fields
+        trade.setForwardRate(new BigDecimal("1.2750"));
+        trade.setSpotRate(new BigDecimal("1.2700"));
+        trade.setIsSpotTrade(false);
+        
         return trade;
     }
 
     private void createSwaps(List<Counterparty> counterparties) {
-        List<Trade> swaps = List.of(
+        List<SwapTrade> swaps = List.of(
             createFXSwap("FX-SWAP-001", counterparties.get(0)),
             createCurrencySwap("CCY-SWAP-002", counterparties.get(1)),
             createInterestRateSwap("IRS-001", counterparties.get(2))
@@ -251,15 +315,23 @@ public class DataInitializer implements CommandLineRunner {
         tradeRepository.saveAll(swaps);
     }
 
-    private Trade createFXSwap(String reference, Counterparty counterparty) {
-        Trade trade = new Trade();
+    private SwapTrade createFXSwap(String reference, Counterparty counterparty) {
+        SwapTrade trade = new SwapTrade();
+        
+        // Set common trade fields
         trade.setTradeReference(reference);
         trade.setCounterparty(counterparty);
-        trade.setProductType(ProductType.FX_SWAP);
-        trade.setSwapType(SwapType.FX_SWAP);
         trade.setBaseCurrency("USD");
         trade.setQuoteCurrency("EUR");
         trade.setNotionalAmount(new BigDecimal("10000000"));
+        trade.setTradeDate(LocalDate.now());
+        trade.setValueDate(LocalDate.now().plusDays(2));
+        trade.setMaturityDate(LocalDate.now().plusDays(32));
+        trade.setStatus(TradeStatus.CONFIRMED);
+        trade.setCreatedBy("trader2");
+        
+        // Set swap-specific fields
+        trade.setSwapType(SwapType.FX_SWAP);
         
         // Near leg (spot)
         trade.setNearLegDate(LocalDate.now().plusDays(2));
@@ -271,51 +343,54 @@ public class DataInitializer implements CommandLineRunner {
         trade.setFarLegRate(new BigDecimal("1.1050"));
         trade.setFarLegAmount(new BigDecimal("10000000"));
         
-        trade.setTradeDate(LocalDate.now());
-        trade.setValueDate(LocalDate.now().plusDays(2));
-        trade.setMaturityDate(LocalDate.now().plusDays(32));
-        trade.setStatus(TradeStatus.CONFIRMED);
-        trade.setCreatedBy("trader2");
         return trade;
     }
 
-    private Trade createCurrencySwap(String reference, Counterparty counterparty) {
-        Trade trade = new Trade();
+    private SwapTrade createCurrencySwap(String reference, Counterparty counterparty) {
+        SwapTrade trade = new SwapTrade();
+        
+        // Set common trade fields
         trade.setTradeReference(reference);
         trade.setCounterparty(counterparty);
-        trade.setProductType(ProductType.CURRENCY_SWAP);
-        trade.setSwapType(SwapType.CURRENCY_SWAP);
         trade.setBaseCurrency("USD");
         trade.setQuoteCurrency("EUR");
         trade.setNotionalAmount(new BigDecimal("50000000"));
-        trade.setFixedRate(new BigDecimal("3.50")); // USD fixed rate
-        trade.setFloatingRateIndex("EURIBOR");
-        trade.setPaymentFrequency("QUARTERLY");
         trade.setTradeDate(LocalDate.now());
         trade.setValueDate(LocalDate.now().plusDays(2));
         trade.setMaturityDate(LocalDate.now().plusYears(5));
         trade.setStatus(TradeStatus.CONFIRMED);
         trade.setCreatedBy("trader1");
+        
+        // Set swap-specific fields
+        trade.setSwapType(SwapType.CURRENCY_SWAP);
+        trade.setFixedRate(new BigDecimal("3.50")); // USD fixed rate
+        trade.setFloatingRateIndex("EURIBOR");
+        trade.setPaymentFrequency("QUARTERLY");
+        
         return trade;
     }
 
-    private Trade createInterestRateSwap(String reference, Counterparty counterparty) {
-        Trade trade = new Trade();
+    private SwapTrade createInterestRateSwap(String reference, Counterparty counterparty) {
+        SwapTrade trade = new SwapTrade();
+        
+        // Set common trade fields
         trade.setTradeReference(reference);
         trade.setCounterparty(counterparty);
-        trade.setProductType(ProductType.INTEREST_RATE_SWAP);
-        trade.setSwapType(SwapType.INTEREST_RATE_SWAP);
         trade.setBaseCurrency("USD");
         trade.setQuoteCurrency("USD");
         trade.setNotionalAmount(new BigDecimal("25000000"));
-        trade.setFixedRate(new BigDecimal("4.25"));
-        trade.setFloatingRateIndex("SOFR");
-        trade.setPaymentFrequency("SEMI_ANNUAL");
         trade.setTradeDate(LocalDate.now());
         trade.setValueDate(LocalDate.now().plusDays(2));
         trade.setMaturityDate(LocalDate.now().plusYears(10));
         trade.setStatus(TradeStatus.CONFIRMED);
         trade.setCreatedBy("trader2");
+        
+        // Set swap-specific fields
+        trade.setSwapType(SwapType.INTEREST_RATE_SWAP);
+        trade.setFixedRate(new BigDecimal("4.25"));
+        trade.setFloatingRateIndex("SOFR");
+        trade.setPaymentFrequency("SEMI_ANNUAL");
+        
         return trade;
     }
 }

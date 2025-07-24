@@ -3,6 +3,7 @@ package org.george.fxoptiontradebooking.service.impl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.george.fxoptiontradebooking.dto.request.TradeBookingRequest;
+import org.george.fxoptiontradebooking.entity.OptionTrade;
 import org.george.fxoptiontradebooking.entity.ProductType;
 import org.george.fxoptiontradebooking.entity.Trade;
 import org.george.fxoptiontradebooking.entity.TradeStatus;
@@ -12,7 +13,6 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 
 @Service
@@ -21,12 +21,18 @@ import java.time.temporal.ChronoUnit;
 public class TradeBusinessLogicService {
     
     private final TradeRepository tradeRepository;
+    private TradeBookingRequest request;
 
     public void applyBusinessLogic(Trade trade, TradeBookingRequest request) {
-        if (isOptionProduct(trade) && trade.getPremiumAmount() == null) {
-            trade.setPremiumAmount(calculateDefaultPremium(trade));
-            trade.setPremiumCurrency(trade.getBaseCurrency());
+        this.request = request;
+        if (isOptionProduct(trade)) {
+            OptionTrade optionTrade = (OptionTrade) trade;
+            if (optionTrade.getPremiumAmount() == null) {
+                optionTrade.setPremiumAmount(calculateDefaultPremium(trade));
+                optionTrade.setPremiumCurrency(trade.getBaseCurrency());
+            }
         }
+
     }
 
     public Trade saveTradeWithAudit(Trade trade) {

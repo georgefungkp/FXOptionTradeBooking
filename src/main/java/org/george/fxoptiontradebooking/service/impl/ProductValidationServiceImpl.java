@@ -39,6 +39,11 @@ public class ProductValidationServiceImpl implements ProductValidationService {
 
     @Override
     public void validateTradeRequest(TradeBookingRequest request) {
+        // Handle null request
+        if (request == null) {
+            throw new BusinessValidationException("Trade booking request cannot be null");
+        }
+        
         log.debug("Starting validation for trade request: {}", request.getTradeReference());
 
         if (request.getProductType() == null) {

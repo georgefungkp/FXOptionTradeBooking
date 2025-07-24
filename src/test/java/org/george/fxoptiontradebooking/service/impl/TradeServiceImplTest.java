@@ -59,14 +59,14 @@ class TradeServiceImplTest {
     private TradeServiceImpl tradeService;
 
     private TradeBookingRequest validRequest;
-    private Trade validTrade;
+    private VanillaOptionTrade validTrade;
     private TradeResponse validResponse;
     private Counterparty validCounterparty;
 
     @BeforeEach
     void setUp() {
         validRequest = createValidTradeBookingRequest();
-        validTrade = createValidTrade();
+        validTrade = createValidVanillaOptionTrade();
         validResponse = createValidTradeResponse();
         validCounterparty = createValidCounterparty();
     }
@@ -427,6 +427,90 @@ class TradeServiceImplTest {
         }
     }
 
+    @Nested
+    @DisplayName("Product-Specific Trade Tests")
+    class ProductSpecificTradeTests {
+
+        @Test
+        @DisplayName("Should book exotic option successfully")
+        void shouldBookExoticOptionSuccessfully() {
+            // Given
+            TradeBookingRequest exoticRequest = createExoticOptionRequest();
+            ExoticOptionTrade exoticTrade = createValidExoticOptionTrade();
+            
+            when(tradeValidationService.validateAndGetCounterparty(anyLong())).thenReturn(validCounterparty);
+            when(tradeFactoryService.createTradeEntity(any(TradeBookingRequest.class), any(Counterparty.class))).thenReturn(exoticTrade);
+            when(tradeBusinessLogicService.saveTradeWithAudit(any(Trade.class))).thenReturn(exoticTrade);
+            when(modelMapper.map(any(Trade.class), eq(TradeResponse.class))).thenReturn(validResponse);
+            
+            doNothing().when(tradeValidationService).performPreTradeValidation(any());
+            doNothing().when(tradeValidationService).validateCounterpartyEligibility(any());
+            doNothing().when(tradeValidationService).validateUniqueTradeReference(any());
+            doNothing().when(tradeBusinessLogicService).applyBusinessLogic(any(), any());
+            doNothing().when(tradeBusinessLogicService).performPostTradeProcessing(any());
+
+            // When
+            TradeResponse result = tradeService.bookTrade(exoticRequest);
+
+            // Then
+            assertNotNull(result);
+            verify(tradeFactoryService).createTradeEntity(exoticRequest, validCounterparty);
+        }
+
+        @Test
+        @DisplayName("Should book FX trade successfully")
+        void shouldBookFXTradeSuccessfully() {
+            // Given
+            TradeBookingRequest fxRequest = createFXTradeRequest();
+            FXTrade fxTrade = createValidFXTrade();
+            
+            when(tradeValidationService.validateAndGetCounterparty(anyLong())).thenReturn(validCounterparty);
+            when(tradeFactoryService.createTradeEntity(any(TradeBookingRequest.class), any(Counterparty.class))).thenReturn(fxTrade);
+            when(tradeBusinessLogicService.saveTradeWithAudit(any(Trade.class))).thenReturn(fxTrade);
+            when(modelMapper.map(any(Trade.class), eq(TradeResponse.class))).thenReturn(validResponse);
+            
+            doNothing().when(tradeValidationService).performPreTradeValidation(any());
+            doNothing().when(tradeValidationService).validateCounterpartyEligibility(any());
+            doNothing().when(tradeValidationService).validateUniqueTradeReference(any());
+            doNothing().when(tradeBusinessLogicService).applyBusinessLogic(any(), any());
+            doNothing().when(tradeBusinessLogicService).performPostTradeProcessing(any());
+
+            // When
+            TradeResponse result = tradeService.bookTrade(fxRequest);
+
+            // Then
+            assertNotNull(result);
+            verify(tradeFactoryService).createTradeEntity(fxRequest, validCounterparty);
+        }
+
+        @Test
+        @DisplayName("Should book swap trade successfully")
+        void shouldBookSwapTradeSuccessfully() {
+            // Given
+            TradeBookingRequest swapRequest = createSwapTradeRequest();
+            SwapTrade swapTrade = createValidSwapTrade();
+            
+            when(tradeValidationService.validateAndGetCounterparty(anyLong())).thenReturn(validCounterparty);
+            when(tradeFactoryService.createTradeEntity(any(TradeBookingRequest.class), any(Counterparty.class))).thenReturn(swapTrade);
+            when(tradeBusinessLogicService.saveTradeWithAudit(any(Trade.class))).thenReturn(swapTrade);
+            when(modelMapper.map(any(Trade.class), eq(TradeResponse.class))).thenReturn(validResponse);
+            
+            doNothing().when(tradeValidationService).performPreTradeValidation(any());
+            doNothing().when(tradeValidationService).validateCounterpartyEligibility(any());
+            doNothing().when(tradeValidationService).validateUniqueTradeReference(any());
+            doNothing().when(tradeBusinessLogicService).applyBusinessLogic(any(), any());
+            doNothing().when(tradeBusinessLogicService).performPostTradeProcessing(any());
+
+            // When
+            TradeResponse result = tradeService.bookTrade(swapRequest);
+
+            // Then
+            assertNotNull(result);
+            verify(tradeFactoryService).createTradeEntity(swapRequest, validCounterparty);
+        }
+    }
+
+    // Helper methods to create test data
     private TradeBookingRequest createValidTradeBookingRequest() {
         TradeBookingRequest request = new TradeBookingRequest();
         request.setTradeReference("TRD-001");
@@ -445,25 +529,162 @@ class TradeServiceImplTest {
         return request;
     }
 
-    private Trade createValidTrade() {
-        Trade trade = new Trade();
+    private TradeBookingRequest createExoticOptionRequest() {
+        TradeBookingRequest request = new TradeBookingRequest();
+        request.setTradeReference("EO-001");
+        request.setCounterpartyId(1L);
+        request.setProductType(ProductType.EXOTIC_OPTION);
+        request.setBaseCurrency("EUR");
+        request.setQuoteCurrency("USD");
+        request.setNotionalAmount(new BigDecimal("100000.00"));
+        request.setStrikePrice(new BigDecimal("1.2500"));
+        request.setSpotRate(new BigDecimal("1.2000"));
+        request.setTradeDate(LocalDate.now());
+        request.setValueDate(LocalDate.now().plusDays(2));
+        request.setMaturityDate(LocalDate.now().plusDays(30));
+        request.setOptionType(OptionType.CALL);
+        request.setExoticOptionType(ExoticOptionType.BARRIER_OPTION);
+        request.setBarrierLevel(new BigDecimal("1.3000"));
+        request.setCreatedBy("TEST_USER");
+        return request;
+    }
+
+    private TradeBookingRequest createFXTradeRequest() {
+        TradeBookingRequest request = new TradeBookingRequest();
+        request.setTradeReference("FX-001");
+        request.setCounterpartyId(1L);
+        request.setProductType(ProductType.FX_FORWARD);
+        request.setBaseCurrency("EUR");
+        request.setQuoteCurrency("USD");
+        request.setNotionalAmount(new BigDecimal("100000.00"));
+        request.setForwardRate(new BigDecimal("1.2500"));
+        request.setSpotRate(new BigDecimal("1.2000"));
+        request.setTradeDate(LocalDate.now());
+        request.setValueDate(LocalDate.now().plusDays(30));
+        request.setCreatedBy("TEST_USER");
+        return request;
+    }
+
+    private TradeBookingRequest createSwapTradeRequest() {
+        TradeBookingRequest request = new TradeBookingRequest();
+        request.setTradeReference("SWAP-001");
+        request.setCounterpartyId(1L);
+        request.setProductType(ProductType.FX_SWAP);
+        request.setBaseCurrency("USD");
+        request.setQuoteCurrency("USD");
+        request.setNotionalAmount(new BigDecimal("1000000.00"));
+        request.setTradeDate(LocalDate.now());
+        request.setValueDate(LocalDate.now().plusDays(2));
+        request.setMaturityDate(LocalDate.now().plusYears(5));
+        request.setSwapType(SwapType.INTEREST_RATE_SWAP);
+        request.setFixedRate(new BigDecimal("2.5"));
+        request.setFloatingRateIndex("SOFR");
+        request.setCreatedBy("TEST_USER");
+        return request;
+    }
+
+    private VanillaOptionTrade createValidVanillaOptionTrade() {
+        VanillaOptionTrade trade = new VanillaOptionTrade();
         trade.setTradeId(1L);
         trade.setTradeReference("TRD-001");
         trade.setCounterparty(createValidCounterparty());
-        trade.setProductType(ProductType.VANILLA_OPTION);
         trade.setBaseCurrency("EUR");
         trade.setQuoteCurrency("USD");
         trade.setNotionalAmount(new BigDecimal("100000.00"));
-        trade.setStrikePrice(new BigDecimal("1.2500"));
-        trade.setSpotRate(new BigDecimal("1.2000"));
         trade.setTradeDate(LocalDate.now());
         trade.setValueDate(LocalDate.now().plusDays(2));
         trade.setMaturityDate(LocalDate.now().plusDays(30));
-        trade.setOptionType(OptionType.CALL);
         trade.setStatus(TradeStatus.PENDING);
         trade.setCreatedBy("TEST_USER");
         trade.setCreatedAt(LocalDateTime.now());
         trade.setUpdatedAt(LocalDateTime.now());
+        
+        // Option-specific fields
+        trade.setOptionType(OptionType.CALL);
+        trade.setStrikePrice(new BigDecimal("1.2500"));
+        trade.setSpotRate(new BigDecimal("1.2000"));
+        trade.setPremiumAmount(new BigDecimal("2500.00"));
+        trade.setPremiumCurrency("EUR");
+        
+        return trade;
+    }
+
+    private ExoticOptionTrade createValidExoticOptionTrade() {
+        ExoticOptionTrade trade = new ExoticOptionTrade();
+        trade.setTradeId(2L);
+        trade.setTradeReference("EO-001");
+        trade.setCounterparty(createValidCounterparty());
+        trade.setBaseCurrency("EUR");
+        trade.setQuoteCurrency("USD");
+        trade.setNotionalAmount(new BigDecimal("100000.00"));
+        trade.setTradeDate(LocalDate.now());
+        trade.setValueDate(LocalDate.now().plusDays(2));
+        trade.setMaturityDate(LocalDate.now().plusDays(30));
+        trade.setStatus(TradeStatus.PENDING);
+        trade.setCreatedBy("TEST_USER");
+        trade.setCreatedAt(LocalDateTime.now());
+        trade.setUpdatedAt(LocalDateTime.now());
+        
+        // Option-specific fields
+        trade.setOptionType(OptionType.CALL);
+        trade.setStrikePrice(new BigDecimal("1.2500"));
+        trade.setSpotRate(new BigDecimal("1.2000"));
+        trade.setPremiumAmount(new BigDecimal("3000.00"));
+        trade.setPremiumCurrency("EUR");
+        
+        // Exotic-specific fields
+        trade.setExoticOptionType(ExoticOptionType.BARRIER_OPTION);
+        trade.setBarrierLevel(new BigDecimal("1.3000"));
+        trade.setKnockInOut("KNOCK_OUT");
+        
+        return trade;
+    }
+
+    private FXTrade createValidFXTrade() {
+        FXTrade trade = new FXTrade();
+        trade.setTradeId(3L);
+        trade.setTradeReference("FX-001");
+        trade.setCounterparty(createValidCounterparty());
+        trade.setBaseCurrency("EUR");
+        trade.setQuoteCurrency("USD");
+        trade.setNotionalAmount(new BigDecimal("100000.00"));
+        trade.setTradeDate(LocalDate.now());
+        trade.setValueDate(LocalDate.now().plusDays(30));
+        trade.setStatus(TradeStatus.PENDING);
+        trade.setCreatedBy("TEST_USER");
+        trade.setCreatedAt(LocalDateTime.now());
+        trade.setUpdatedAt(LocalDateTime.now());
+        
+        // FX-specific fields
+        trade.setForwardRate(new BigDecimal("1.2500"));
+        trade.setSpotRate(new BigDecimal("1.2000"));
+        trade.setIsSpotTrade(false);
+        
+        return trade;
+    }
+
+    private SwapTrade createValidSwapTrade() {
+        SwapTrade trade = new SwapTrade();
+        trade.setTradeId(4L);
+        trade.setTradeReference("SWAP-001");
+        trade.setCounterparty(createValidCounterparty());
+        trade.setBaseCurrency("USD");
+        trade.setQuoteCurrency("USD");
+        trade.setNotionalAmount(new BigDecimal("1000000.00"));
+        trade.setTradeDate(LocalDate.now());
+        trade.setValueDate(LocalDate.now().plusDays(2));
+        trade.setMaturityDate(LocalDate.now().plusYears(5));
+        trade.setStatus(TradeStatus.PENDING);
+        trade.setCreatedBy("TEST_USER");
+        trade.setCreatedAt(LocalDateTime.now());
+        trade.setUpdatedAt(LocalDateTime.now());
+        
+        // Swap-specific fields
+        trade.setSwapType(SwapType.INTEREST_RATE_SWAP);
+        trade.setFixedRate(new BigDecimal("2.5"));
+        trade.setFloatingRateIndex("SOFR");
+        trade.setPaymentFrequency("QUARTERLY");
+        
         return trade;
     }
 
@@ -475,7 +696,6 @@ class TradeServiceImplTest {
         response.setBaseCurrency("EUR");
         response.setQuoteCurrency("USD");
         response.setNotionalAmount(new BigDecimal("100000.00"));
-        response.setStrikePrice(new BigDecimal("1.2500"));
         response.setStatus(TradeStatus.PENDING);
         return response;
     }

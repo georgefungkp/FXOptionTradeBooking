@@ -1,4 +1,3 @@
-
 package org.george.fxoptiontradebooking.service.impl;
 
 import lombok.RequiredArgsConstructor;
@@ -52,7 +51,7 @@ public class TradeQueryService {
         validateCounterpartyId(counterpartyId);
         validateCounterpartyExists(counterpartyId);
         
-        List<Trade> trades = tradeRepository.findByCounterpartyCounterpartyId(counterpartyId);
+        List<Trade> trades = tradeRepository.findByCounterparty_CounterpartyId(counterpartyId);
         return mapTradesToResponses(trades);
     }
 
@@ -80,7 +79,7 @@ public class TradeQueryService {
     public List<TradeResponse> getTradesByCurrency(String currency) {
         validateCurrency(currency);
         
-        List<Trade> trades = tradeRepository.findTradesByCurrency(currency.toUpperCase());
+        List<Trade> trades = tradeRepository.findByCurrency(currency.toUpperCase());
         return mapTradesToResponses(trades);
     }
 
@@ -89,7 +88,14 @@ public class TradeQueryService {
             throw new BusinessValidationException("Product type cannot be null");
         }
         
-        List<Trade> trades = tradeRepository.findByProductType(productType);
+        List<Trade> trades = switch (productType) {
+            case VANILLA_OPTION -> tradeRepository.findAllVanillaOptions();
+            case EXOTIC_OPTION -> tradeRepository.findAllExoticOptions();
+            case FX_FORWARD, FX_SPOT -> tradeRepository.findAllFXTrades();
+            case FX_SWAP -> tradeRepository.findAllSwaps();
+            default -> List.of();
+        };
+
         return mapTradesToResponses(trades);
     }
 
@@ -98,23 +104,36 @@ public class TradeQueryService {
             throw new BusinessValidationException("Product type cannot be null");
         }
         
-        Page<Trade> trades = tradeRepository.findByProductType(productType, pageable);
-        return trades.map(trade -> modelMapper.map(trade, TradeResponse.class));
+        // For paginated queries, we need to create custom repository methods
+        // For now, we'll get all and paginate manually (not optimal for large datasets)
+        List<TradeResponse> allTrades = getTradesByProductType(productType);
+        
+        int start = (int) pageable.getOffset();
+        int end = Math.min((start + pageable.getPageSize()), allTrades.size());
+        
+        List<TradeResponse> pageContent = allTrades.subList(start, end);
+        return new org.springframework.data.domain.PageImpl<>(
+                pageContent, 
+                pageable, 
+                allTrades.size()
+        );
     }
 
     public Page<TradeResponse> getTradesByCounterpartyPaginated(Long counterpartyId, Pageable pageable) {
         validateCounterpartyId(counterpartyId);
         validateCounterpartyExists(counterpartyId);
         
-        Page<Trade> trades = tradeRepository.findByCounterpartyCounterpartyId(counterpartyId, pageable);
+        Page<Trade> trades = tradeRepository.findByCounterparty_CounterpartyId(counterpartyId, pageable);
         return trades.map(trade -> modelMapper.map(trade, TradeResponse.class));
     }
 
     public List<TradeResponse> getVanillaOptionsExpiringBetween(LocalDate startDate, LocalDate endDate) {
         validateDateRange(startDate, endDate);
         
-        List<Trade> trades = tradeRepository.findVanillaOptionsExpiringBetween(startDate, endDate);
-        return mapTradesToResponses(trades);
+        List<VanillaOptionTrade> vanillaOptions = tradeRepository.findVanillaOptionsExpiringBetween(startDate, endDate);
+        return vanillaOptions.stream()
+                .map(trade -> modelMapper.map(trade, TradeResponse.class))
+                .collect(Collectors.toList());
     }
 
     public List<TradeResponse> getExoticOptionsByType(ExoticOptionType exoticType) {
@@ -122,8 +141,10 @@ public class TradeQueryService {
             throw new BusinessValidationException("Exotic option type cannot be null");
         }
         
-        List<Trade> trades = tradeRepository.findExoticOptionsByType(exoticType);
-        return mapTradesToResponses(trades);
+        List<ExoticOptionTrade> exoticOptions = tradeRepository.findExoticOptionsByType(exoticType);
+        return exoticOptions.stream()
+                .map(trade -> modelMapper.map(trade, TradeResponse.class))
+                .collect(Collectors.toList());
     }
 
     public List<TradeResponse> getAllSwaps() {
@@ -136,8 +157,10 @@ public class TradeQueryService {
             throw new BusinessValidationException("Swap type cannot be null");
         }
         
-        List<Trade> trades = tradeRepository.findBySwapType(swapType);
-        return mapTradesToResponses(trades);
+        List<SwapTrade> swaps = tradeRepository.findSwapsByType(swapType);
+        return swaps.stream()
+                .map(trade -> modelMapper.map(trade, TradeResponse.class))
+                .collect(Collectors.toList());
     }
 
     public List<TradeResponse> getInterestRateSwapsByIndex(String floatingRateIndex) {
@@ -145,20 +168,24 @@ public class TradeQueryService {
             throw new BusinessValidationException("Floating rate index cannot be null or empty");
         }
         
-        List<Trade> trades = tradeRepository.findInterestRateSwapsByIndex(floatingRateIndex);
-        return mapTradesToResponses(trades);
+        List<SwapTrade> swaps = tradeRepository.findInterestRateSwapsByIndex(floatingRateIndex);
+        return swaps.stream()
+                .map(trade -> modelMapper.map(trade, TradeResponse.class))
+                .collect(Collectors.toList());
     }
 
     public List<TradeResponse> getAllFXContracts() {
-        List<Trade> trades = tradeRepository.findAllFXContracts();
+        List<Trade> trades = tradeRepository.findAllFXTrades();
         return mapTradesToResponses(trades);
     }
 
     public List<TradeResponse> getFXForwardsMaturing(LocalDate startDate, LocalDate endDate) {
         validateDateRange(startDate, endDate);
         
-        List<Trade> trades = tradeRepository.findFXForwardsMaturing(startDate, endDate);
-        return mapTradesToResponses(trades);
+        List<FXTrade> fxForwards = tradeRepository.findFXForwardsMaturing(startDate, endDate);
+        return fxForwards.stream()
+                .map(trade -> modelMapper.map(trade, TradeResponse.class))
+                .collect(Collectors.toList());
     }
 
     private List<TradeResponse> mapTradesToResponses(List<Trade> trades) {
