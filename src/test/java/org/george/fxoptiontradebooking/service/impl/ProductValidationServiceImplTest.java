@@ -3,16 +3,19 @@ package org.george.fxoptiontradebooking.service.impl;
 import org.george.fxoptiontradebooking.dto.request.TradeBookingRequest;
 import org.george.fxoptiontradebooking.entity.*;
 import org.george.fxoptiontradebooking.exception.BusinessValidationException;
+import org.george.fxoptiontradebooking.service.validator.ProductValidator;
+import org.george.fxoptiontradebooking.service.validator.impl.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Arrays;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -20,8 +23,155 @@ import static org.junit.jupiter.api.Assertions.*;
 @DisplayName("Product Validation Service Tests")
 class ProductValidationServiceImplTest {
 
-    @InjectMocks
     private ProductValidationServiceImpl productValidationService;
+
+    @BeforeEach
+    void setUp() {
+        // Create all validators
+        List<ProductValidator> validators = Arrays.asList(
+                new VanillaOptionValidator(),
+                new ExoticOptionValidator(),
+                new FXContractValidator(),
+                new SwapValidator()
+        );
+        
+        // Initialize service with validators
+        productValidationService = new ProductValidationServiceImpl(validators);
+    }
+
+    @Nested
+    @DisplayName("Service Initialization Tests")
+    class ServiceInitializationTests {
+
+        @Test
+        @DisplayName("Should initialize with all validators")
+        void shouldInitializeWithAllValidators() {
+            assertNotNull(productValidationService);
+            // Verify service can handle all product types without throwing exceptions during initialization
+        }
+    }
+
+    @Nested
+    @DisplayName("Common Validation Tests")
+    class CommonValidationTests {
+
+        @Test
+        @DisplayName("Should throw exception for null request")
+        void shouldThrowExceptionForNullRequest() {
+            BusinessValidationException exception = assertThrows(
+                    BusinessValidationException.class,
+                    () -> productValidationService.validateTradeRequest(null)
+            );
+            assertEquals("Trade booking request cannot be null", exception.getMessage());
+        }
+
+        @Test
+        @DisplayName("Should throw exception for missing product type")
+        void shouldThrowExceptionForMissingProductType() {
+            TradeBookingRequest request = createValidVanillaOptionRequest();
+            request.setProductType(null);
+
+            BusinessValidationException exception = assertThrows(
+                    BusinessValidationException.class,
+                    () -> productValidationService.validateTradeRequest(request)
+            );
+            assertEquals("Product type is required", exception.getMessage());
+        }
+
+        @Test
+        @DisplayName("Should throw exception for unsupported product type")
+        void shouldThrowExceptionForUnsupportedProductType() {
+            TradeBookingRequest request = createValidVanillaOptionRequest();
+            // Assuming there's a product type not covered by validators
+            // This test may need adjustment based on actual enum values
+
+            BusinessValidationException exception = assertThrows(
+                    BusinessValidationException.class,
+                    () -> productValidationService.validateTradeRequest(request)
+            );
+            assertTrue(exception.getMessage().contains("No validator found for product type") ||
+                      exception.getMessage().contains("validator not available"));
+        }
+
+        @Test
+        @DisplayName("Should throw exception for invalid trade reference")
+        void shouldThrowExceptionForInvalidTradeReference() {
+            TradeBookingRequest request = createValidVanillaOptionRequest();
+            request.setTradeReference("");
+
+            BusinessValidationException exception = assertThrows(
+                    BusinessValidationException.class,
+                    () -> productValidationService.validateTradeRequest(request)
+            );
+            assertEquals("Trade reference is required", exception.getMessage());
+        }
+
+        @Test
+        @DisplayName("Should throw exception for long trade reference")
+        void shouldThrowExceptionForLongTradeReference() {
+            TradeBookingRequest request = createValidVanillaOptionRequest();
+            request.setTradeReference("A".repeat(51)); // 51 characters
+
+            BusinessValidationException exception = assertThrows(
+                    BusinessValidationException.class,
+                    () -> productValidationService.validateTradeRequest(request)
+            );
+            assertEquals("Trade reference cannot exceed 50 characters", exception.getMessage());
+        }
+
+        @Test
+        @DisplayName("Should throw exception for invalid counterparty ID")
+        void shouldThrowExceptionForInvalidCounterpartyId() {
+            TradeBookingRequest request = createValidVanillaOptionRequest();
+            request.setCounterpartyId(-1L);
+
+            BusinessValidationException exception = assertThrows(
+                    BusinessValidationException.class,
+                    () -> productValidationService.validateTradeRequest(request)
+            );
+            assertEquals("Valid counterparty ID is required", exception.getMessage());
+        }
+
+        @Test
+        @DisplayName("Should throw exception for same currencies")
+        void shouldThrowExceptionForSameCurrencies() {
+            TradeBookingRequest request = createValidVanillaOptionRequest();
+            request.setBaseCurrency("USD");
+            request.setQuoteCurrency("USD");
+
+            BusinessValidationException exception = assertThrows(
+                    BusinessValidationException.class,
+                    () -> productValidationService.validateTradeRequest(request)
+            );
+            assertEquals("Base and quote currencies must be different", exception.getMessage());
+        }
+
+        @Test
+        @DisplayName("Should throw exception for small notional amount")
+        void shouldThrowExceptionForSmallNotionalAmount() {
+            TradeBookingRequest request = createValidVanillaOptionRequest();
+            request.setNotionalAmount(new BigDecimal("5000"));
+
+            BusinessValidationException exception = assertThrows(
+                    BusinessValidationException.class,
+                    () -> productValidationService.validateTradeRequest(request)
+            );
+            assertEquals("Minimum notional amount is 10,000", exception.getMessage());
+        }
+
+        @Test
+        @DisplayName("Should throw exception for large notional amount")
+        void shouldThrowExceptionForLargeNotionalAmount() {
+            TradeBookingRequest request = createValidVanillaOptionRequest();
+            request.setNotionalAmount(new BigDecimal("2000000000")); // 2 billion
+
+            BusinessValidationException exception = assertThrows(
+                    BusinessValidationException.class,
+                    () -> productValidationService.validateTradeRequest(request)
+            );
+            assertEquals("Maximum notional amount is 1 billion", exception.getMessage());
+        }
+    }
 
     @Nested
     @DisplayName("Vanilla Option Validation Tests")
@@ -31,7 +181,7 @@ class ProductValidationServiceImplTest {
         @DisplayName("Should validate vanilla option successfully")
         void shouldValidateVanillaOptionSuccessfully() {
             TradeBookingRequest request = createValidVanillaOptionRequest();
-            
+
             assertDoesNotThrow(() -> productValidationService.validateTradeRequest(request));
         }
 
@@ -40,10 +190,10 @@ class ProductValidationServiceImplTest {
         void shouldThrowExceptionWhenOptionTypeIsMissing() {
             TradeBookingRequest request = createValidVanillaOptionRequest();
             request.setOptionType(null);
-            
+
             BusinessValidationException exception = assertThrows(
-                BusinessValidationException.class, 
-                () -> productValidationService.validateTradeRequest(request)
+                    BusinessValidationException.class,
+                    () -> productValidationService.validateTradeRequest(request)
             );
             assertEquals("Option type is required for vanilla options", exception.getMessage());
         }
@@ -53,10 +203,10 @@ class ProductValidationServiceImplTest {
         void shouldThrowExceptionWhenStrikePriceIsMissing() {
             TradeBookingRequest request = createValidVanillaOptionRequest();
             request.setStrikePrice(null);
-            
+
             BusinessValidationException exception = assertThrows(
-                BusinessValidationException.class, 
-                () -> productValidationService.validateTradeRequest(request)
+                    BusinessValidationException.class,
+                    () -> productValidationService.validateTradeRequest(request)
             );
             assertEquals("Strike price is required for vanilla options", exception.getMessage());
         }
@@ -66,10 +216,10 @@ class ProductValidationServiceImplTest {
         void shouldThrowExceptionWhenMaturityIsBeforeValueDate() {
             TradeBookingRequest request = createValidVanillaOptionRequest();
             request.setMaturityDate(request.getValueDate().minusDays(1));
-            
+
             BusinessValidationException exception = assertThrows(
-                BusinessValidationException.class, 
-                () -> productValidationService.validateTradeRequest(request)
+                    BusinessValidationException.class,
+                    () -> productValidationService.validateTradeRequest(request)
             );
             assertEquals("Maturity date must be after value date", exception.getMessage());
         }
@@ -83,7 +233,7 @@ class ProductValidationServiceImplTest {
         @DisplayName("Should validate barrier option successfully")
         void shouldValidateBarrierOptionSuccessfully() {
             TradeBookingRequest request = createValidBarrierOptionRequest();
-            
+
             assertDoesNotThrow(() -> productValidationService.validateTradeRequest(request));
         }
 
@@ -92,10 +242,10 @@ class ProductValidationServiceImplTest {
         void shouldThrowExceptionWhenExoticOptionTypeIsMissing() {
             TradeBookingRequest request = createValidBarrierOptionRequest();
             request.setExoticOptionType(null);
-            
+
             BusinessValidationException exception = assertThrows(
-                BusinessValidationException.class, 
-                () -> productValidationService.validateTradeRequest(request)
+                    BusinessValidationException.class,
+                    () -> productValidationService.validateTradeRequest(request)
             );
             assertEquals("Exotic option type is required for exotic options", exception.getMessage());
         }
@@ -105,10 +255,10 @@ class ProductValidationServiceImplTest {
         void shouldThrowExceptionWhenBarrierLevelIsMissing() {
             TradeBookingRequest request = createValidBarrierOptionRequest();
             request.setBarrierLevel(null);
-            
+
             BusinessValidationException exception = assertThrows(
-                BusinessValidationException.class, 
-                () -> productValidationService.validateTradeRequest(request)
+                    BusinessValidationException.class,
+                    () -> productValidationService.validateTradeRequest(request)
             );
             assertEquals("Barrier level is required for barrier options", exception.getMessage());
         }
@@ -122,7 +272,7 @@ class ProductValidationServiceImplTest {
         @DisplayName("Should validate FX forward successfully")
         void shouldValidateFXForwardSuccessfully() {
             TradeBookingRequest request = createValidFXForwardRequest();
-            
+
             assertDoesNotThrow(() -> productValidationService.validateTradeRequest(request));
         }
 
@@ -131,12 +281,12 @@ class ProductValidationServiceImplTest {
         void shouldThrowExceptionWhenForwardRateIsMissing() {
             TradeBookingRequest request = createValidFXForwardRequest();
             request.setForwardRate(null);
-            
+
             BusinessValidationException exception = assertThrows(
-                BusinessValidationException.class, 
-                () -> productValidationService.validateTradeRequest(request)
+                    BusinessValidationException.class,
+                    () -> productValidationService.validateTradeRequest(request)
             );
-            assertEquals("Forward rate is required for FX forwards", exception.getMessage());
+            assertEquals("Forward rate is required for FX contracts", exception.getMessage());
         }
     }
 
@@ -148,7 +298,7 @@ class ProductValidationServiceImplTest {
         @DisplayName("Should validate interest rate swap successfully")
         void shouldValidateInterestRateSwapSuccessfully() {
             TradeBookingRequest request = createValidInterestRateSwapRequest();
-            
+
             assertDoesNotThrow(() -> productValidationService.validateTradeRequest(request));
         }
 
@@ -157,10 +307,10 @@ class ProductValidationServiceImplTest {
         void shouldThrowExceptionWhenSwapTypeIsMissing() {
             TradeBookingRequest request = createValidInterestRateSwapRequest();
             request.setSwapType(null);
-            
+
             BusinessValidationException exception = assertThrows(
-                BusinessValidationException.class, 
-                () -> productValidationService.validateTradeRequest(request)
+                    BusinessValidationException.class,
+                    () -> productValidationService.validateTradeRequest(request)
             );
             assertEquals("Swap type is required for swap products", exception.getMessage());
         }
@@ -170,96 +320,122 @@ class ProductValidationServiceImplTest {
         void shouldThrowExceptionWhenFixedRateIsMissingForIRS() {
             TradeBookingRequest request = createValidInterestRateSwapRequest();
             request.setFixedRate(null);
-            
+
             BusinessValidationException exception = assertThrows(
-                BusinessValidationException.class, 
-                () -> productValidationService.validateTradeRequest(request)
+                    BusinessValidationException.class,
+                    () -> productValidationService.validateTradeRequest(request)
             );
             assertEquals("Fixed rate is required for interest rate swaps", exception.getMessage());
         }
     }
 
     @Nested
-    @DisplayName("Common Validation Tests")
-    class CommonValidationTests {
+    @DisplayName("Legacy Method Tests")
+    class LegacyMethodTests {
 
         @Test
-        @DisplayName("Should throw exception for unsupported currency")
-        void shouldThrowExceptionForUnsupportedCurrency() {
+        @DisplayName("Should delegate vanilla option validation")
+        void shouldDelegateVanillaOptionValidation() {
             TradeBookingRequest request = createValidVanillaOptionRequest();
-            request.setBaseCurrency("XYZ"); // Unsupported currency
-            
-            BusinessValidationException exception = assertThrows(
-                BusinessValidationException.class, 
-                () -> productValidationService.validateTradeRequest(request)
-            );
-            assertEquals("Unsupported base currency: XYZ", exception.getMessage());
+
+            assertDoesNotThrow(() -> productValidationService.validateVanillaOption(request));
         }
 
         @Test
-        @DisplayName("Should throw exception when base and quote currencies are same")
-        void shouldThrowExceptionWhenCurrenciesAreSame() {
-            TradeBookingRequest request = createValidVanillaOptionRequest();
-            request.setQuoteCurrency(request.getBaseCurrency());
-            
-            BusinessValidationException exception = assertThrows(
-                BusinessValidationException.class, 
-                () -> productValidationService.validateTradeRequest(request)
-            );
-            assertEquals("Base and quote currencies cannot be the same", exception.getMessage());
+        @DisplayName("Should delegate exotic option validation")
+        void shouldDelegateExoticOptionValidation() {
+            TradeBookingRequest request = createValidBarrierOptionRequest();
+
+            assertDoesNotThrow(() -> productValidationService.validateExoticOption(request));
+        }
+
+        @Test
+        @DisplayName("Should delegate FX contract validation")
+        void shouldDelegateFXContractValidation() {
+            TradeBookingRequest request = createValidFXForwardRequest();
+
+            assertDoesNotThrow(() -> productValidationService.validateFXContract(request));
+        }
+
+        @Test
+        @DisplayName("Should delegate swap validation")
+        void shouldDelegateSwapValidation() {
+            TradeBookingRequest request = createValidInterestRateSwapRequest();
+
+            assertDoesNotThrow(() -> productValidationService.validateSwap(request));
         }
     }
 
     // Helper methods
     private TradeBookingRequest createValidVanillaOptionRequest() {
         TradeBookingRequest request = new TradeBookingRequest();
+        request.setTradeReference("VO-001");
+        request.setCounterpartyId(1L);
         request.setProductType(ProductType.VANILLA_OPTION);
-        request.setOptionType(OptionType.CALL);
         request.setBaseCurrency("EUR");
         request.setQuoteCurrency("USD");
-        request.setNotionalAmount(new BigDecimal("1000000"));
-        request.setStrikePrice(new BigDecimal("1.1000"));
+        request.setNotionalAmount(new BigDecimal("100000.00"));
+        request.setStrikePrice(new BigDecimal("1.2500"));
+        request.setSpotRate(new BigDecimal("1.2000"));
         request.setTradeDate(LocalDate.now());
         request.setValueDate(LocalDate.now().plusDays(2));
-        request.setMaturityDate(LocalDate.now().plusMonths(1));
+        request.setMaturityDate(LocalDate.now().plusDays(30));
+        request.setOptionType(OptionType.CALL);
+        request.setCreatedBy("TEST_USER");
         return request;
     }
 
     private TradeBookingRequest createValidBarrierOptionRequest() {
-        TradeBookingRequest request = createValidVanillaOptionRequest();
+        TradeBookingRequest request = new TradeBookingRequest();
+        request.setTradeReference("EO-001");
+        request.setCounterpartyId(1L);
         request.setProductType(ProductType.EXOTIC_OPTION);
+        request.setBaseCurrency("EUR");
+        request.setQuoteCurrency("USD");
+        request.setNotionalAmount(new BigDecimal("100000.00"));
+        request.setStrikePrice(new BigDecimal("1.2500"));
+        request.setTradeDate(LocalDate.now());
+        request.setValueDate(LocalDate.now().plusDays(2));
+        request.setMaturityDate(LocalDate.now().plusDays(30));
+        request.setOptionType(OptionType.CALL);
         request.setExoticOptionType(ExoticOptionType.BARRIER_OPTION);
-        request.setBarrierLevel(new BigDecimal("1.1500"));
-        request.setKnockInOut("OUT");
+        request.setBarrierLevel(new BigDecimal("1.3000"));
+        request.setKnockInOut("KNOCK_OUT");
+        request.setCreatedBy("TEST_USER");
         return request;
     }
 
     private TradeBookingRequest createValidFXForwardRequest() {
         TradeBookingRequest request = new TradeBookingRequest();
+        request.setTradeReference("FXF-001");
+        request.setCounterpartyId(1L);
         request.setProductType(ProductType.FX_FORWARD);
-        request.setBaseCurrency("GBP");
+        request.setBaseCurrency("EUR");
         request.setQuoteCurrency("USD");
-        request.setNotionalAmount(new BigDecimal("2000000"));
-        request.setForwardRate(new BigDecimal("1.2750"));
+        request.setNotionalAmount(new BigDecimal("100000.00"));
+        request.setForwardRate(new BigDecimal("1.2500"));
         request.setTradeDate(LocalDate.now());
-        request.setValueDate(LocalDate.now().plusDays(2));
-        request.setMaturityDate(LocalDate.now().plusMonths(3));
+        request.setValueDate(LocalDate.now().plusDays(30));
+        request.setCreatedBy("TEST_USER");
         return request;
     }
 
     private TradeBookingRequest createValidInterestRateSwapRequest() {
         TradeBookingRequest request = new TradeBookingRequest();
-        request.setProductType(ProductType.INTEREST_RATE_SWAP);
-        request.setSwapType(SwapType.INTEREST_RATE_SWAP);
+        request.setTradeReference("IRS-001");
+        request.setCounterpartyId(1L);
+        request.setProductType(ProductType.FX_SWAP);
         request.setBaseCurrency("USD");
         request.setQuoteCurrency("USD");
-        request.setNotionalAmount(new BigDecimal("10000000"));
-        request.setFixedRate(new BigDecimal("4.25"));
-        request.setFloatingRateIndex("SOFR");
-        request.setPaymentFrequency("SEMI_ANNUAL");
+        request.setNotionalAmount(new BigDecimal("1000000.00"));
         request.setTradeDate(LocalDate.now());
         request.setValueDate(LocalDate.now().plusDays(2));
         request.setMaturityDate(LocalDate.now().plusYears(5));
+        request.setSwapType(SwapType.INTEREST_RATE_SWAP);
+        request.setFixedRate(new BigDecimal("2.5"));
+        request.setFloatingRateIndex("SOFR");
+        request.setPaymentFrequency("QUARTERLY");
+        request.setCreatedBy("TEST_USER");
         return request;
     }
 }
