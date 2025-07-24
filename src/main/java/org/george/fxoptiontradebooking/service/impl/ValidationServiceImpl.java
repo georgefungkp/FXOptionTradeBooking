@@ -114,22 +114,22 @@ public class ValidationServiceImpl implements ValidationService {
         // Step 3: Validate trade amounts (notional, strike price)
         validateAmounts(request);
 
+        // Step 4: Validate option-specific data (option type, etc.)
+        validateOptionSpecificData(request);
+
+        // Step 5: Validate premium data BEFORE date validation
+        validatePremiumData(request);
+
         // Critical validation: Check same-day maturity FIRST before any date sequence validation
         // This is a common error that should be caught early in the validation process
         if (request.getMaturityDate().equals(request.getTradeDate())) {
             throw new BusinessValidationException("Same-day options are not supported");
         }
 
-        // Step 4: Validate date sequences and business days
+        // Step 6: Validate date sequences and business days (moved after premium validation)
         validateDates(request);
 
-        // Step 5: Validate option-specific data (option type, etc.)
-        validateOptionSpecificData(request);
-
-        // Step 6: Validate premium data (amount, currency)
-        validatePremiumData(request);
-
-        // Step 7: Validate additional business rules
+        // Step 7: Validate business rules and cross-field validations
         validateBusinessRules(request);
 
         log.debug("Validation completed successfully for trade reference: {}", request.getTradeReference());
@@ -565,6 +565,9 @@ public class ValidationServiceImpl implements ValidationService {
             throw new BusinessValidationException(fieldName + " cannot be a weekend: " + date);
         }
 
+        // Additional holiday validation could be added here using a holiday calendar service
+        // This would check for country-specific holidays based on the currencies involved
+        // Example: USD holidays for USD trades, both USD and EUR holidays for EUR/USD trades
         // Additional holiday validation could be added here using a holiday calendar service
         // This would check for country-specific holidays based on the currencies involved
         // Example: USD holidays for USD trades, both USD and EUR holidays for EUR/USD trades

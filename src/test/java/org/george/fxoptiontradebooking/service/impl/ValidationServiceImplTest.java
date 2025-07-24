@@ -13,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.DayOfWeek;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -273,8 +274,9 @@ class ValidationServiceImplTest {
         void shouldValidateCorrectDateSequence() {
             LocalDate today = LocalDate.now();
             validRequest.setTradeDate(today);
-            validRequest.setValueDate(today.plusDays(2));
-            validRequest.setMaturityDate(today.plusDays(30));
+            validRequest.setValueDate(getNextBusinessDay(today.plusDays(2)));
+            validRequest.setMaturityDate(getNextBusinessDay(today.plusDays(30)));
+
 
             assertDoesNotThrow(() -> validationService.validateDateSequence(validRequest));
         }
@@ -296,7 +298,7 @@ class ValidationServiceImplTest {
         void shouldThrowExceptionForInvalidValueDate() {
             LocalDate today = LocalDate.now();
             validRequest.setTradeDate(today);
-            validRequest.setValueDate(today);
+            validRequest.setValueDate(today); // The Same day should fail regardless of weekday
 
             BusinessValidationException exception = assertThrows(
                 BusinessValidationException.class,
@@ -309,9 +311,10 @@ class ValidationServiceImplTest {
         @DisplayName("Should throw exception for invalid maturity date")
         void shouldThrowExceptionForInvalidMaturityDate() {
             LocalDate today = LocalDate.now();
+            LocalDate valueDate = getNextBusinessDay(today.plusDays(2));
             validRequest.setTradeDate(today);
-            validRequest.setValueDate(today.plusDays(2));
-            validRequest.setMaturityDate(today.plusDays(2));
+            validRequest.setValueDate(valueDate);
+            validRequest.setMaturityDate(valueDate); // Same as value date should fail
 
             BusinessValidationException exception = assertThrows(
                 BusinessValidationException.class,
@@ -324,10 +327,15 @@ class ValidationServiceImplTest {
         @DisplayName("Should throw exception for weekend value date")
         void shouldThrowExceptionForWeekendValueDate() {
             LocalDate today = LocalDate.now();
+            // Find the next Saturday
             LocalDate saturday = today.with(java.time.DayOfWeek.SATURDAY);
+            if (saturday.isBefore(today) || saturday.equals(today)) {
+                saturday = saturday.plusWeeks(1);
+            }
+            
             validRequest.setTradeDate(today);
             validRequest.setValueDate(saturday);
-            validRequest.setMaturityDate(saturday.plusDays(30));
+            validRequest.setMaturityDate(getNextBusinessDay(saturday.plusDays(30)));
 
             BusinessValidationException exception = assertThrows(
                 BusinessValidationException.class,
@@ -339,7 +347,13 @@ class ValidationServiceImplTest {
         @Test
         @DisplayName("Should throw exception for same day maturity")
         void shouldThrowExceptionForSameDayMaturity() {
-            validRequest.setMaturityDate(validRequest.getTradeDate());
+            // Use business days to avoid weekend issues
+            LocalDate today = LocalDate.now();
+            LocalDate valueDate = getNextBusinessDay(today.plusDays(2));
+            
+            validRequest.setTradeDate(today);
+            validRequest.setValueDate(valueDate);
+            validRequest.setMaturityDate(today); // Same as trade date
 
             BusinessValidationException exception = assertThrows(
                 BusinessValidationException.class,
@@ -415,11 +429,24 @@ class ValidationServiceImplTest {
         request.setNotionalAmount(new BigDecimal("100000.00"));
         request.setStrikePrice(new BigDecimal("1.2500"));
         request.setSpotRate(new BigDecimal("1.2000"));
-        request.setTradeDate(LocalDate.now());
-        request.setValueDate(LocalDate.now().plusDays(2));
-        request.setMaturityDate(LocalDate.now().plusDays(30));
+        
+        // Ensure we use business days
+        LocalDate today = LocalDate.now();
+        LocalDate valueDate = getNextBusinessDay(today.plusDays(2));
+        LocalDate maturityDate = getNextBusinessDay(valueDate.plusDays(30));
+        
+        request.setTradeDate(today);
+        request.setValueDate(valueDate);
+        request.setMaturityDate(maturityDate);
         request.setOptionType(OptionType.CALL);
         request.setCreatedBy("TEST_USER");
         return request;
+    }
+
+    private LocalDate getNextBusinessDay(LocalDate date) {
+        while (date.getDayOfWeek() == DayOfWeek.SATURDAY || date.getDayOfWeek() == DayOfWeek.SUNDAY) {
+            date = date.plusDays(1);
+        }
+        return date;
     }
 }

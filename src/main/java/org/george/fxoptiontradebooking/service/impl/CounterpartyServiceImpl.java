@@ -14,6 +14,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.regex.Pattern;
@@ -94,7 +95,7 @@ public class CounterpartyServiceImpl implements CounterpartyService {
 
         try {
             Counterparty counterparty = new Counterparty();
-            createCounterparty(request, counterparty);
+            mapRequestToEntity(request, counterparty);
             counterparty.setIsActive(request.getIsActive() != null ? request.getIsActive() : true);
 
             Counterparty savedCounterparty = counterpartyRepository.save(counterparty);
@@ -118,30 +119,46 @@ public class CounterpartyServiceImpl implements CounterpartyService {
      * @param request The source request containing counterparty data
      * @param counterparty The target counterparty entity to populate
      */
-    private void createCounterparty(CounterpartyRequest request, Counterparty counterparty) {
+    private void mapRequestToEntity(CounterpartyRequest request, Counterparty counterparty) {
         // Normalize all inputs by trimming whitespace and converting to uppercase
         // This ensures consistent data storage regardless of input format
 
         // Counterparty code is stored in uppercase for consistent matching and lookup
-        counterparty.setCounterpartyCode(request.getCounterpartyCode().toUpperCase().trim());
-
-        // Name is trimmed but case is preserved to maintain proper entity naming
+        counterparty.setCounterpartyCode(request.getCounterpartyCode().trim().toUpperCase());
+        
+        // Name is stored as provided but trimmed of whitespace
         counterparty.setName(request.getName().trim());
-
-        // LEI code is standardized to uppercase as per ISO 17442 standard
-        counterparty.setLeiCode(request.getLeiCode() != null ? request.getLeiCode().toUpperCase().trim() : null);
-
-        // SWIFT/BIC codes are always uppercase per ISO 9362 standard
-        counterparty.setSwiftCode(request.getSwiftCode() != null ? request.getSwiftCode().toUpperCase().trim() : null);
-
-        // Credit ratings are standardized to uppercase for consistent risk assessment
-        counterparty.setCreditRating(request.getCreditRating() != null ? request.getCreditRating().toUpperCase().trim() : null);
+        
+        // LEI code is uppercase alphanumeric only for global consistency
+        if (request.getLeiCode() != null && !request.getLeiCode().trim().isEmpty()) {
+            counterparty.setLeiCode(request.getLeiCode().trim().toUpperCase());
+        }
+        
+        // SWIFT code is uppercase for BIC standard compliance
+        if (request.getSwiftCode() != null && !request.getSwiftCode().trim().isEmpty()) {
+            counterparty.setSwiftCode(request.getSwiftCode().trim().toUpperCase());
+        }
+        
+        // Credit rating is uppercase for standard rating agency format
+        if (request.getCreditRating() != null && !request.getCreditRating().trim().isEmpty()) {
+            counterparty.setCreditRating(request.getCreditRating().trim().toUpperCase());
+        }
+        
+        // Set audit timestamps
+        LocalDateTime now = LocalDateTime.now();
+        if (counterparty.getCounterpartyId() == null) {
+            counterparty.setCreatedAt(now);
+        }
     }
 
     @Override
     @Transactional(readOnly = true)
     public CounterpartyResponse getCounterpartyById(Long counterpartyId) {
-        log.debug("Retrieving counterparty by ID: {}", counterpartyId);
+        if (counterpartyId == null || counterpartyId <= 0) {
+            throw new BusinessValidationException("Counterparty ID must be a positive number");
+        }
+
+        log.debug("Retrieving counterparty with ID: {}", counterpartyId);
 
         Counterparty counterparty = counterpartyRepository.findById(counterpartyId)
                 .orElseThrow(() -> new TradeNotFoundException("Counterparty not found with ID: " + counterpartyId));
@@ -152,13 +169,13 @@ public class CounterpartyServiceImpl implements CounterpartyService {
     @Override
     @Transactional(readOnly = true)
     public CounterpartyResponse getCounterpartyByCode(String counterpartyCode) {
-        log.debug("Retrieving counterparty by code: {}", counterpartyCode);
-
         if (counterpartyCode == null || counterpartyCode.trim().isEmpty()) {
             throw new BusinessValidationException("Counterparty code cannot be null or empty");
         }
 
-        Counterparty counterparty = counterpartyRepository.findByCounterpartyCode(counterpartyCode.toUpperCase().trim())
+        log.debug("Retrieving counterparty with code: {}", counterpartyCode);
+
+        Counterparty counterparty = counterpartyRepository.findByCounterpartyCode(counterpartyCode.trim().toUpperCase())
                 .orElseThrow(() -> new TradeNotFoundException("Counterparty not found with code: " + counterpartyCode));
 
         return modelMapper.map(counterparty, CounterpartyResponse.class);
@@ -170,7 +187,7 @@ public class CounterpartyServiceImpl implements CounterpartyService {
         log.debug("Retrieving all active counterparties");
 
         List<Counterparty> activeCounterparties = counterpartyRepository.findByIsActiveTrue();
-
+        
         return activeCounterparties.stream()
                 .map(counterparty -> modelMapper.map(counterparty, CounterpartyResponse.class))
                 .collect(Collectors.toList());
@@ -181,40 +198,51 @@ public class CounterpartyServiceImpl implements CounterpartyService {
     public List<CounterpartyResponse> getAllCounterparties() {
         log.debug("Retrieving all counterparties");
 
-        List<Counterparty> counterparties = counterpartyRepository.findAll();
-
-        return counterparties.stream()
+        List<Counterparty> allCounterparties = counterpartyRepository.findAll();
+        
+        return allCounterparties.stream()
                 .map(counterparty -> modelMapper.map(counterparty, CounterpartyResponse.class))
                 .collect(Collectors.toList());
     }
 
     @Override
     public CounterpartyResponse updateCounterparty(Long counterpartyId, CounterpartyRequest request) {
-        log.info("Updating counterparty with ID: {}", counterpartyId);
+        if (counterpartyId == null || counterpartyId <= 0) {
+            throw new BusinessValidationException("Counterparty ID must be a positive number");
+        }
 
-        validateCounterpartyRequest(request);
+        if (request == null) {
+            throw new BusinessValidationException("Counterparty request cannot be null");
+        }
+
+        log.info("Updating counterparty with ID: {}", counterpartyId);
 
         Counterparty existingCounterparty = counterpartyRepository.findById(counterpartyId)
                 .orElseThrow(() -> new TradeNotFoundException("Counterparty not found with ID: " + counterpartyId));
 
-        // Check for duplicate counterparty code (excluding current counterparty)
-        Optional<Counterparty> duplicateCode = counterpartyRepository.findByCounterpartyCode(request.getCounterpartyCode());
-        if (duplicateCode.isPresent() && !duplicateCode.get().getCounterpartyId().equals(counterpartyId)) {
+        // Validate the updated request
+        validateCounterpartyRequest(request);
+
+        // Check for duplicate counterparty code (but allow keeping the same code)
+        Optional<Counterparty> existingByCode = counterpartyRepository.findByCounterpartyCode(request.getCounterpartyCode());
+        if (existingByCode.isPresent() && !existingByCode.get().getCounterpartyId().equals(counterpartyId)) {
             throw new BusinessValidationException("Counterparty code already exists: " + request.getCounterpartyCode());
         }
 
-        // Check for duplicate LEI code if provided (excluding current counterparty)
+        // Check for duplicate LEI code (but allow keeping the same LEI)
         if (request.getLeiCode() != null && !request.getLeiCode().trim().isEmpty()) {
-            Optional<Counterparty> duplicateLei = counterpartyRepository.findByLeiCode(request.getLeiCode());
-            if (duplicateLei.isPresent() && !duplicateLei.get().getCounterpartyId().equals(counterpartyId)) {
+            Optional<Counterparty> existingByLei = counterpartyRepository.findByLeiCode(request.getLeiCode());
+            if (existingByLei.isPresent() && !existingByLei.get().getCounterpartyId().equals(counterpartyId)) {
                 throw new BusinessValidationException("LEI code already exists: " + request.getLeiCode());
             }
         }
 
         try {
-            // Update counterparty fields
-            createCounterparty(request, existingCounterparty);
-            existingCounterparty.setIsActive(request.getIsActive() != null ? request.getIsActive() : existingCounterparty.getIsActive());
+            mapRequestToEntity(request, existingCounterparty);
+            
+            if (request.getIsActive() != null) {
+                existingCounterparty.setIsActive(request.getIsActive());
+            }
 
             Counterparty updatedCounterparty = counterpartyRepository.save(existingCounterparty);
 
@@ -228,116 +256,103 @@ public class CounterpartyServiceImpl implements CounterpartyService {
         }
     }
 
-    @Override
     public void deactivateCounterparty(Long counterpartyId) {
+        if (counterpartyId == null || counterpartyId <= 0) {
+            throw new BusinessValidationException("Counterparty ID must be a positive number");
+        }
+
         log.info("Deactivating counterparty with ID: {}", counterpartyId);
 
         Counterparty counterparty = counterpartyRepository.findById(counterpartyId)
                 .orElseThrow(() -> new TradeNotFoundException("Counterparty not found with ID: " + counterpartyId));
 
-        // Investment banks typically don't delete counterparties but deactivate them for audit purposes
+        if (!counterparty.getIsActive()) {
+            throw new BusinessValidationException("Counterparty is already inactive");
+        }
+
         counterparty.setIsActive(false);
+
         counterpartyRepository.save(counterparty);
 
         log.info("Successfully deactivated counterparty with ID: {}", counterpartyId);
     }
 
-            /**
-             * Validates all aspects of a counterparty request according to financial industry standards.
-             * Performs validation on required fields, formats, and lengths to ensure data integrity.
-             *
-             * @param request The counterparty request to validate
-             * @throws BusinessValidationException if any validation check fails
-             */
-            private void validateCounterpartyRequest(CounterpartyRequest request) {
-        // Validate counterparty code - required field for all financial counterparties
+    /**
+     * Validates all aspects of a counterparty request according to financial industry standards.
+     * Performs validation on required fields, formats, and lengths to ensure data integrity.
+     *
+     * @param request The counterparty request to validate
+     * @throws BusinessValidationException if any validation check fails
+     */
+    private void validateCounterpartyRequest(CounterpartyRequest request) {
+        // Validate required fields
         if (request.getCounterpartyCode() == null || request.getCounterpartyCode().trim().isEmpty()) {
             throw new BusinessValidationException("Counterparty code is required");
         }
 
-        // Normalize and validate code format against industry standard pattern
-        String normalizedCode = request.getCounterpartyCode().toUpperCase().trim();
-        if (!COUNTERPARTY_CODE_PATTERN.matcher(normalizedCode).matches()) {
-            throw new BusinessValidationException("Counterparty code must be 3-10 alphanumeric characters: " + request.getCounterpartyCode());
-        }
-
-        // Validate name
         if (request.getName() == null || request.getName().trim().isEmpty()) {
             throw new BusinessValidationException("Counterparty name is required");
         }
 
-        if (request.getName().trim().length() > 255) {
-            throw new BusinessValidationException("Counterparty name cannot exceed 255 characters");
+        // Validate counterparty code format
+        if (!COUNTERPARTY_CODE_PATTERN.matcher(request.getCounterpartyCode().trim().toUpperCase()).matches()) {
+            throw new BusinessValidationException("Counterparty code must be 3-10 alphanumeric characters");
         }
 
-        // Validate LEI code if provided (Legal Entity Identifier standard)
+        // Validate name length (reasonable business limit)
+        if (request.getName().trim().length() > 100) {
+            throw new BusinessValidationException("Counterparty name cannot exceed 100 characters");
+        }
+
+        // Validate LEI code format if provided
         if (request.getLeiCode() != null && !request.getLeiCode().trim().isEmpty()) {
-            String normalizedLei = request.getLeiCode().toUpperCase().trim();
-            if (!LEI_CODE_PATTERN.matcher(normalizedLei).matches()) {
-                throw new BusinessValidationException("Invalid LEI code format. Must be 20 alphanumeric characters: " + request.getLeiCode());
+            if (!LEI_CODE_PATTERN.matcher(request.getLeiCode().trim().toUpperCase()).matches()) {
+                throw new BusinessValidationException("Invalid LEI code format. LEI must be 20 alphanumeric characters");
             }
         }
 
-        // Validate SWIFT code if provided (Bank Identifier Code standard)
+        // Validate SWIFT code format if provided
         if (request.getSwiftCode() != null && !request.getSwiftCode().trim().isEmpty()) {
-            String normalizedSwift = request.getSwiftCode().toUpperCase().trim();
-            if (!SWIFT_CODE_PATTERN.matcher(normalizedSwift).matches()) {
-                throw new BusinessValidationException("Invalid SWIFT code format. Must follow BIC standards: " + request.getSwiftCode());
+            if (!SWIFT_CODE_PATTERN.matcher(request.getSwiftCode().trim().toUpperCase()).matches()) {
+                throw new BusinessValidationException("Invalid SWIFT code format. SWIFT code must be 8 or 11 characters");
             }
         }
 
-        // Validate credit rating if provided (investment grade and speculative ratings)
+        // Validate credit rating if provided
         if (request.getCreditRating() != null && !request.getCreditRating().trim().isEmpty()) {
-            validateCreditRating(request.getCreditRating());
+            validateCreditRating(request.getCreditRating().trim());
         }
     }
 
-            /**
-             * Validates credit rating against standard industry rating scales.
-             * Checks for length constraints and recognized rating values from major agencies.
-             * Also logs warnings for non-standard ratings and sub-investment grade ratings.
-             *
-             * @param creditRating The credit rating to validate
-             * @throws BusinessValidationException if the rating format is invalid
-             */
-            private void validateCreditRating(String creditRating) {
-        // Enforce maximum length constraint
-        if (creditRating.length() > 5) {
-            throw new BusinessValidationException("Credit rating cannot exceed 5 characters");
+    /**
+     * Validates credit rating against standard industry rating scales.
+     * Checks for length constraints and recognized rating values from major agencies.
+     * Also logs warnings for non-standard ratings and sub-investment grade ratings.
+     *
+     * @param creditRating The credit rating to validate
+     * @throws BusinessValidationException if the rating format is invalid
+     */
+    private void validateCreditRating(String creditRating) {
+        if (creditRating.length() > 10) {
+            throw new BusinessValidationException("Credit rating cannot exceed 10 characters");
         }
 
-        String normalizedRating = creditRating.toUpperCase().trim();
-
-        // Standard rating scales used by major rating agencies (S&P, Moody's, and Fitch)
-        // Investment grade: AAA to BBB-
-        // Speculative grade: BB+ to D
-        // NR: Not Rated
-        String[] validRatings = {
-            "AAA", "AA+", "AA", "AA-", "A+", "A", "A-",
-            "BBB+", "BBB", "BBB-", "BB+", "BB", "BB-",
-            "B+", "B", "B-", "CCC+", "CCC", "CCC-",
-            "CC", "C", "D", "NR" // NR = Not Rated
-        };
-
-        boolean isValidRating = false;
-        for (String validRating : validRatings) {
-            if (validRating.equals(normalizedRating)) {
-                isValidRating = true;
-                break;
-            }
-        }
+        // Standard rating patterns from major agencies (S&P, Moody's, Fitch)
+        String upperRating = creditRating.toUpperCase();
+        
+        // Check for recognized rating patterns
+        boolean isValidRating = upperRating.matches("^(AAA|AA[+-]?|A[+-]?|BBB[+-]?|BB[+-]?|B[+-]?|CCC[+-]?|CC|C|D)$") ||
+                               upperRating.matches("^(AAA|AA[123]?|A[123]?|BAA[123]?|BA[123]?|B[123]?|CAA[123]?|CA|C)$");
 
         if (!isValidRating) {
-            log.warn("Non-standard credit rating provided: {}. Proceeding with validation.", creditRating);
+            log.warn("Non-standard credit rating provided: {}", creditRating);
+            // We don't throw an exception for non-standard ratings to allow flexibility
         }
 
-        // Warn for sub-investment grade ratings (BB+ and below)
-        String[] subInvestmentGrade = {"BB+", "BB", "BB-", "B+", "B", "B-", "CCC+", "CCC", "CCC-", "CC", "C", "D"};
-        for (String rating : subInvestmentGrade) {
-            if (rating.equals(normalizedRating)) {
-                log.warn("Sub-investment grade rating detected: {}. Additional risk monitoring may be required.", creditRating);
-                break;
-            }
+        // Log warning for sub-investment grade ratings
+        if (upperRating.startsWith("BB") || upperRating.startsWith("B") || upperRating.startsWith("C") || 
+            upperRating.startsWith("BA") || upperRating.equals("D")) {
+            log.warn("Sub-investment grade rating assigned: {}", creditRating);
         }
     }
 }

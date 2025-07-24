@@ -1,11 +1,11 @@
 package org.george.fxoptiontradebooking.config;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.george.fxoptiontradebooking.entity.*;
 import org.george.fxoptiontradebooking.repository.CounterpartyRepository;
 import org.george.fxoptiontradebooking.repository.TradeRepository;
 import org.george.fxoptiontradebooking.repository.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
@@ -13,262 +13,309 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
- * Initializes sample data for the application on startup.
- * Creates default users, counterparties, and sample trades for testing and demo purposes.
- * This component is executed when the application starts up via Spring's CommandLineRunner.
+ * Initializes comprehensive sample data for multi-product financial trading system.
+ * Creates default users, counterparties, and diverse sample trades across all product types
+ * including vanilla options, exotic options, FX contracts, and swap instruments.
  */
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class DataInitializer implements CommandLineRunner {
 
-    @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private PasswordEncoder passwordEncoder;
-
-    @Autowired
-    private TradeRepository tradeRepository;
-
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final TradeRepository tradeRepository;
     private final CounterpartyRepository counterpartyRepository;
 
-    /**
-     * Executes the data initialization process on application startup.
-     * Creates sample users, counterparties, and trades if none exist in the database.
-     *
-     * @param args Command line arguments passed to the application
-     * @throws Exception if initialization fails
-     */
     @Override
     public void run(String... args) throws Exception {
-        createSampleUsers();
-        createSampleCounterparties();
-        createSampleTrades();
+        log.info("Starting data initialization...");
+        
+        if (userRepository.count() == 0) {
+            createSampleUsers();
+            log.info("Sample users created");
+        }
+        
+        if (counterpartyRepository.count() == 0) {
+            createSampleCounterparties();
+            log.info("Sample counterparties created");
+        }
+        
+        if (tradeRepository.count() == 0) {
+            createSampleTrades();
+            log.info("Sample trades created");
+        }
+        
+        log.info("Data initialization completed");
     }
 
     private void createSampleUsers() {
-        if (userRepository.count() == 0) {
-            // Create admin user
-            User admin = new User();
-            admin.setUsername("admin");
-            admin.setPassword(passwordEncoder.encode("admin123"));
-            admin.setEmail("admin@fxtrading.com");
-            admin.setEnabled(true);
-            admin.setRoles(Set.of(Role.ADMIN, Role.TRADER));
-            userRepository.save(admin);
+        List<User> users = List.of(
+            createUser("admin", "admin@fxtrading.com", "password", Set.of(Role.ADMIN)),
+            createUser("trader1", "trader1@fxtrading.com", "password", Set.of(Role.TRADER)),
+            createUser("trader2", "trader2@fxtrading.com", "password", Set.of(Role.TRADER)),
+            createUser("user1", "user1@fxtrading.com", "password", Set.of(Role.USER))
+        );
+        userRepository.saveAll(users);
+    }
 
-            // Create regular user
-            User trader = new User();
-            trader.setUsername("trader");
-            trader.setPassword(passwordEncoder.encode("trader123"));
-            trader.setEmail("trader@fxtrading.com");
-            trader.setEnabled(true);
-            trader.setRoles(Set.of(Role.TRADER, Role.USER));
-            userRepository.save(trader);
-
-            System.out.println("Default users created:");
-            System.out.println("Admin: admin/admin123");
-            System.out.println("Trader: trader/trader123");
-        }
+    private User createUser(String username, String email, String password, Set<Role> roles) {
+        User user = new User();
+        user.setUsername(username);
+        user.setEmail(email);
+        user.setPassword(passwordEncoder.encode(password));
+        user.setRoles(roles);
+        user.setEnabled(true);
+        return user;
     }
 
     private void createSampleCounterparties() {
-        if (counterpartyRepository.count() == 0) {
-            Counterparty goldmanSachs = new Counterparty();
-            goldmanSachs.setCounterpartyCode("CP001");
-            goldmanSachs.setName("Goldman Sachs");
-            goldmanSachs.setLeiCode("7LTWFZYICNSX8D621K86");
-            goldmanSachs.setSwiftCode("GSCCUS33");
-            goldmanSachs.setCreditRating("A+");
-            goldmanSachs.setIsActive(true);
+        List<Counterparty> counterparties = List.of(
+            createCounterparty("CP001", "Goldman Sachs", "GOLDMAN", "AAA"),
+            createCounterparty("CP002", "JPMorgan Chase", "JPM", "AA+"),
+            createCounterparty("CP003", "Deutsche Bank", "DB", "A+"),
+            createCounterparty("CP004", "UBS Group", "UBS", "AA-"),
+            createCounterparty("CP005", "Barclays", "BARC", "A"),
+            createCounterparty("CP006", "Credit Suisse", "CS", "BBB+")
+        );
+        counterpartyRepository.saveAll(counterparties);
+    }
 
-            Counterparty jpMorgan = new Counterparty();
-            jpMorgan.setCounterpartyCode("CP002");
-            jpMorgan.setName("JPMorgan Chase");
-            jpMorgan.setLeiCode("8I5DZWZKVSZI1NUEF608");
-            jpMorgan.setSwiftCode("CHASUS33");
-            jpMorgan.setCreditRating("AA-");
-            jpMorgan.setIsActive(true);
-
-            Counterparty citigroup = new Counterparty();
-            citigroup.setCounterpartyCode("CP003");
-            citigroup.setName("Citigroup Inc");
-            citigroup.setLeiCode("6SHGI4ZSSLCXXQSBB395");
-            citigroup.setSwiftCode("CITIUS33");
-            citigroup.setCreditRating("A");
-            citigroup.setIsActive(true);
-
-            Counterparty barclay = new Counterparty();
-            barclay.setCounterpartyCode("CP004");
-            barclay.setName("Barclays Bank");
-            barclay.setLeiCode("G5GSEF7VJP5I7OUK5573");
-            barclay.setSwiftCode("BARCGB22");
-            barclay.setCreditRating("A-");
-            barclay.setIsActive(true);
-
-            counterpartyRepository.saveAll(List.of(goldmanSachs, jpMorgan, citigroup, barclay));
-            System.out.println("Sample counterparties created successfully!");
-        }
+    private Counterparty createCounterparty(String code, String name, String shortName, String rating) {
+        Counterparty counterparty = new Counterparty();
+        counterparty.setCounterpartyCode(code);
+        counterparty.setName(name);
+        counterparty.setCreditRating(rating);
+        counterparty.setIsActive(true);
+        counterparty.setCreatedAt(LocalDateTime.now());
+        return counterparty;
     }
 
     private void createSampleTrades() {
-        if (tradeRepository.count() == 0) {
-            List<Counterparty> counterparties = counterpartyRepository.findAll();
+        List<Counterparty> counterparties = counterpartyRepository.findAll();
+        
+        // Create vanilla options
+        createVanillaOptions(counterparties);
+        
+        // Create exotic options
+        createExoticOptions(counterparties);
+        
+        // Create FX contracts
+        createFXContracts(counterparties);
+        
+        // Create swaps
+        createSwaps(counterparties);
+    }
 
-            if (!counterparties.isEmpty()) {
-                LocalDate today = LocalDate.now();
-                LocalDate yesterday = today.minusDays(1);
-                LocalDate lastWeek = today.minusDays(7);
+    private void createVanillaOptions(List<Counterparty> counterparties) {
+        List<Trade> vanillaOptions = List.of(
+            createVanillaOption("VO-EUR-USD-001", counterparties.get(0), OptionType.CALL, 
+                "EUR", "USD", new BigDecimal("1000000"), new BigDecimal("1.1000"), 
+                new BigDecimal("1.0950"), LocalDate.now().plusDays(30)),
+                
+            createVanillaOption("VO-GBP-USD-002", counterparties.get(1), OptionType.PUT,
+                "GBP", "USD", new BigDecimal("500000"), new BigDecimal("1.2500"),
+                new BigDecimal("1.2600"), LocalDate.now().plusDays(45)),
+                
+            createVanillaOption("VO-USD-JPY-003", counterparties.get(2), OptionType.CALL,
+                "USD", "JPY", new BigDecimal("2000000"), new BigDecimal("110.00"),
+                new BigDecimal("109.50"), LocalDate.now().plusDays(60))
+        );
+        tradeRepository.saveAll(vanillaOptions);
+    }
 
-                // Trade 1: EUR/USD Call Option with Goldman Sachs
-                Trade eurUsdCall = new Trade();
-                eurUsdCall.setTradeReference("TRD-2024-001");
-                eurUsdCall.setCounterparty(counterparties.get(0)); // Goldman Sachs
-                eurUsdCall.setBaseCurrency("EUR");
-                eurUsdCall.setQuoteCurrency("USD");
-                eurUsdCall.setNotionalAmount(new BigDecimal("1000000.00")); // 1M EUR
-                eurUsdCall.setStrikePrice(new BigDecimal("1.0850"));
-                eurUsdCall.setSpotRate(new BigDecimal("1.0820"));
-                eurUsdCall.setTradeDate(yesterday);
-                eurUsdCall.setValueDate(yesterday.plusDays(2));
-                eurUsdCall.setMaturityDate(yesterday.plusDays(30));
-                eurUsdCall.setOptionType(OptionType.CALL);
-                eurUsdCall.setStatus(TradeStatus.CONFIRMED);
-                eurUsdCall.setPremiumAmount(new BigDecimal("15000.00"));
-                eurUsdCall.setPremiumCurrency("USD");
-                eurUsdCall.setCreatedAt(LocalDateTime.now().minusDays(1));
-                eurUsdCall.setCreatedBy("trader");
+    private Trade createVanillaOption(String reference, Counterparty counterparty, OptionType optionType,
+                                     String baseCurrency, String quoteCurrency, BigDecimal notional,
+                                     BigDecimal strike, BigDecimal spot, LocalDate maturity) {
+        Trade trade = new Trade();
+        trade.setTradeReference(reference);
+        trade.setCounterparty(counterparty);
+        trade.setProductType(ProductType.VANILLA_OPTION);
+        trade.setOptionType(optionType);
+        trade.setBaseCurrency(baseCurrency);
+        trade.setQuoteCurrency(quoteCurrency);
+        trade.setNotionalAmount(notional);
+        trade.setStrikePrice(strike);
+        trade.setSpotRate(spot);
+        trade.setTradeDate(LocalDate.now());
+        trade.setValueDate(LocalDate.now().plusDays(2));
+        trade.setMaturityDate(maturity);
+        trade.setPremiumAmount(notional.multiply(new BigDecimal("0.025"))); // 2.5% premium
+        trade.setPremiumCurrency(baseCurrency);
+        trade.setStatus(TradeStatus.CONFIRMED);
+        trade.setCreatedBy("trader1");
+        return trade;
+    }
 
-                // Trade 2: GBP/USD Put Option with JPMorgan
-                Trade gbpUsdPut = new Trade();
-                gbpUsdPut.setTradeReference("TRD-2024-002");
-                gbpUsdPut.setCounterparty(counterparties.get(1)); // JPMorgan
-                gbpUsdPut.setBaseCurrency("GBP");
-                gbpUsdPut.setQuoteCurrency("USD");
-                gbpUsdPut.setNotionalAmount(new BigDecimal("750000.00")); // 750K GBP
-                gbpUsdPut.setStrikePrice(new BigDecimal("1.2650"));
-                gbpUsdPut.setSpotRate(new BigDecimal("1.2680"));
-                gbpUsdPut.setTradeDate(lastWeek);
-                gbpUsdPut.setValueDate(lastWeek.plusDays(2));
-                gbpUsdPut.setMaturityDate(lastWeek.plusDays(60));
-                gbpUsdPut.setOptionType(OptionType.PUT);
-                gbpUsdPut.setStatus(TradeStatus.SETTLED);
-                gbpUsdPut.setPremiumAmount(new BigDecimal("22500.00"));
-                gbpUsdPut.setPremiumCurrency("USD");
-                gbpUsdPut.setCreatedAt(LocalDateTime.now().minusDays(7));
-                gbpUsdPut.setCreatedBy("admin");
+    private void createExoticOptions(List<Counterparty> counterparties) {
+        List<Trade> exoticOptions = List.of(
+            createBarrierOption("EO-BARRIER-001", counterparties.get(0)),
+            createAsianOption("EO-ASIAN-002", counterparties.get(1)),
+            createDigitalOption("EO-DIGITAL-003", counterparties.get(2))
+        );
+        tradeRepository.saveAll(exoticOptions);
+    }
 
-                // Trade 3: USD/JPY Call Option with Citigroup (Pending)
-                Trade usdJpyCall = new Trade();
-                usdJpyCall.setTradeReference("TRD-2024-003");
-                usdJpyCall.setCounterparty(counterparties.get(2)); // Citigroup
-                usdJpyCall.setBaseCurrency("USD");
-                usdJpyCall.setQuoteCurrency("JPY");
-                usdJpyCall.setNotionalAmount(new BigDecimal("500000.00")); // 500K USD
-                usdJpyCall.setStrikePrice(new BigDecimal("150.50"));
-                usdJpyCall.setSpotRate(new BigDecimal("149.85"));
-                usdJpyCall.setTradeDate(today);
-                usdJpyCall.setValueDate(today.plusDays(2));
-                usdJpyCall.setMaturityDate(today.plusDays(45));
-                usdJpyCall.setOptionType(OptionType.CALL);
-                usdJpyCall.setStatus(TradeStatus.PENDING);
-                usdJpyCall.setPremiumAmount(new BigDecimal("12000.00"));
-                usdJpyCall.setPremiumCurrency("USD");
-                usdJpyCall.setCreatedAt(LocalDateTime.now());
-                usdJpyCall.setCreatedBy("trader");
+    private Trade createBarrierOption(String reference, Counterparty counterparty) {
+        Trade trade = createVanillaOption(reference, counterparty, OptionType.CALL,
+            "EUR", "USD", new BigDecimal("1500000"), new BigDecimal("1.1200"),
+            new BigDecimal("1.1000"), LocalDate.now().plusDays(90));
+        
+        trade.setProductType(ProductType.EXOTIC_OPTION);
+        trade.setExoticOptionType(ExoticOptionType.BARRIER_OPTION);
+        trade.setBarrierLevel(new BigDecimal("1.1500")); // Knock-out barrier
+        trade.setKnockInOut("OUT");
+        trade.setObservationFrequency("CONTINUOUS");
+        trade.setPremiumAmount(trade.getNotionalAmount().multiply(new BigDecimal("0.015"))); // Lower premium due to barrier
+        return trade;
+    }
 
-                // Trade 4: EUR/GBP Put Option with Barclays
-                Trade eurGbpPut = new Trade();
-                eurGbpPut.setTradeReference("TRD-2024-004");
-                eurGbpPut.setCounterparty(counterparties.get(3)); // Barclays
-                eurGbpPut.setBaseCurrency("EUR");
-                eurGbpPut.setQuoteCurrency("GBP");
-                eurGbpPut.setNotionalAmount(new BigDecimal("2000000.00")); // 2M EUR
-                eurGbpPut.setStrikePrice(new BigDecimal("0.8550"));
-                eurGbpPut.setSpotRate(new BigDecimal("0.8575"));
-                eurGbpPut.setTradeDate(today.minusDays(3));
-                eurGbpPut.setValueDate(today.minusDays(1));
-                eurGbpPut.setMaturityDate(today.plusDays(90));
-                eurGbpPut.setOptionType(OptionType.PUT);
-                eurGbpPut.setStatus(TradeStatus.CONFIRMED);
-                eurGbpPut.setPremiumAmount(new BigDecimal("35000.00"));
-                eurGbpPut.setPremiumCurrency("EUR");
-                eurGbpPut.setCreatedAt(LocalDateTime.now().minusDays(3));
-                eurGbpPut.setCreatedBy("admin");
+    private Trade createAsianOption(String reference, Counterparty counterparty) {
+        Trade trade = createVanillaOption(reference, counterparty, OptionType.PUT,
+            "GBP", "JPY", new BigDecimal("800000"), new BigDecimal("140.00"),
+            new BigDecimal("141.50"), LocalDate.now().plusDays(120));
+        
+        trade.setProductType(ProductType.EXOTIC_OPTION);
+        trade.setExoticOptionType(ExoticOptionType.ASIAN_OPTION);
+        trade.setObservationFrequency("DAILY");
+        trade.setPremiumAmount(trade.getNotionalAmount().multiply(new BigDecimal("0.020")));
+        return trade;
+    }
 
-                // Trade 5: USD/CHF Call Option with Goldman Sachs (Large Trade)
-                Trade usdChfCall = new Trade();
-                usdChfCall.setTradeReference("TRD-2024-005");
-                usdChfCall.setCounterparty(counterparties.get(0)); // Goldman Sachs
-                usdChfCall.setBaseCurrency("USD");
-                usdChfCall.setQuoteCurrency("CHF");
-                usdChfCall.setNotionalAmount(new BigDecimal("5000000.00")); // 5M USD
-                usdChfCall.setStrikePrice(new BigDecimal("0.9200"));
-                usdChfCall.setSpotRate(new BigDecimal("0.9180"));
-                usdChfCall.setTradeDate(today.minusDays(2));
-                usdChfCall.setValueDate(today);
-                usdChfCall.setMaturityDate(today.plusDays(180));
-                usdChfCall.setOptionType(OptionType.CALL);
-                usdChfCall.setStatus(TradeStatus.CONFIRMED);
-                usdChfCall.setPremiumAmount(new BigDecimal("75000.00"));
-                usdChfCall.setPremiumCurrency("USD");
-                usdChfCall.setCreatedAt(LocalDateTime.now().minusDays(2));
-                usdChfCall.setCreatedBy("trader");
+    private Trade createDigitalOption(String reference, Counterparty counterparty) {
+        Trade trade = createVanillaOption(reference, counterparty, OptionType.CALL,
+            "USD", "CHF", new BigDecimal("1200000"), new BigDecimal("0.9200"),
+            new BigDecimal("0.9150"), LocalDate.now().plusDays(30));
+        
+        trade.setProductType(ProductType.EXOTIC_OPTION);
+        trade.setExoticOptionType(ExoticOptionType.DIGITAL_OPTION);
+        trade.setPremiumAmount(new BigDecimal("50000")); // Fixed payout for digital
+        return trade;
+    }
 
-                // Trade 6: AUD/USD Put Option with JPMorgan (Recent)
-                Trade audUsdPut = new Trade();
-                audUsdPut.setTradeReference("TRD-2024-006");
-                audUsdPut.setCounterparty(counterparties.get(1)); // JPMorgan
-                audUsdPut.setBaseCurrency("AUD");
-                audUsdPut.setQuoteCurrency("USD");
-                audUsdPut.setNotionalAmount(new BigDecimal("800000.00")); // 800K AUD
-                audUsdPut.setStrikePrice(new BigDecimal("0.6450"));
-                audUsdPut.setSpotRate(new BigDecimal("0.6475"));
-                audUsdPut.setTradeDate(today);
-                audUsdPut.setValueDate(today.plusDays(2));
-                audUsdPut.setMaturityDate(today.plusDays(120));
-                audUsdPut.setOptionType(OptionType.PUT);
-                audUsdPut.setStatus(TradeStatus.PENDING);
-                audUsdPut.setPremiumAmount(new BigDecimal("18000.00"));
-                audUsdPut.setPremiumCurrency("USD");
-                audUsdPut.setCreatedAt(LocalDateTime.now().minusHours(2));
-                audUsdPut.setCreatedBy("admin");
+    private void createFXContracts(List<Counterparty> counterparties) {
+        List<Trade> fxContracts = List.of(
+            createFXSpot("FX-SPOT-001", counterparties.get(3)),
+            createFXForward("FX-FWD-002", counterparties.get(4)),
+            createFXForward("FX-FWD-003", counterparties.get(5))
+        );
+        tradeRepository.saveAll(fxContracts);
+    }
 
-                // Trade 7: EUR/CHF Call Option with Citigroup (Cancelled)
-                Trade eurChfCall = new Trade();
-                eurChfCall.setTradeReference("TRD-2024-007");
-                eurChfCall.setCounterparty(counterparties.get(2)); // Citigroup
-                eurChfCall.setBaseCurrency("EUR");
-                eurChfCall.setQuoteCurrency("CHF");
-                eurChfCall.setNotionalAmount(new BigDecimal("300000.00")); // 300K EUR
-                eurChfCall.setStrikePrice(new BigDecimal("0.9850"));
-                eurChfCall.setSpotRate(new BigDecimal("0.9825"));
-                eurChfCall.setTradeDate(today.minusDays(5));
-                eurChfCall.setValueDate(today.minusDays(3));
-                eurChfCall.setMaturityDate(today.plusDays(30));
-                eurChfCall.setOptionType(OptionType.CALL);
-                eurChfCall.setStatus(TradeStatus.CANCELLED);
-                eurChfCall.setPremiumAmount(new BigDecimal("8500.00"));
-                eurChfCall.setPremiumCurrency("EUR");
-                eurChfCall.setCreatedAt(LocalDateTime.now().minusDays(5));
-                eurChfCall.setCreatedBy("trader");
+    private Trade createFXSpot(String reference, Counterparty counterparty) {
+        Trade trade = new Trade();
+        trade.setTradeReference(reference);
+        trade.setCounterparty(counterparty);
+        trade.setProductType(ProductType.FX_SPOT);
+        trade.setBaseCurrency("EUR");
+        trade.setQuoteCurrency("USD");
+        trade.setNotionalAmount(new BigDecimal("5000000"));
+        trade.setSpotRate(new BigDecimal("1.0980"));
+        trade.setTradeDate(LocalDate.now());
+        trade.setValueDate(LocalDate.now().plusDays(2));
+        trade.setStatus(TradeStatus.CONFIRMED);
+        trade.setCreatedBy("trader2");
+        return trade;
+    }
 
-                tradeRepository.saveAll(List.of(
-                    eurUsdCall, gbpUsdPut, usdJpyCall, eurGbpPut,
-                    usdChfCall, audUsdPut, eurChfCall
-                ));
+    private Trade createFXForward(String reference, Counterparty counterparty) {
+        Trade trade = new Trade();
+        trade.setTradeReference(reference);
+        trade.setCounterparty(counterparty);
+        trade.setProductType(ProductType.FX_FORWARD);
+        trade.setBaseCurrency("GBP");
+        trade.setQuoteCurrency("USD");
+        trade.setNotionalAmount(new BigDecimal("3000000"));
+        trade.setForwardRate(new BigDecimal("1.2750"));
+        trade.setSpotRate(new BigDecimal("1.2700"));
+        trade.setTradeDate(LocalDate.now());
+        trade.setValueDate(LocalDate.now().plusDays(2));
+        trade.setMaturityDate(LocalDate.now().plusDays(180));
+        trade.setStatus(TradeStatus.CONFIRMED);
+        trade.setCreatedBy("trader1");
+        return trade;
+    }
 
-                System.out.println("Sample trades created successfully!");
-                System.out.println("- 7 sample FX option trades created");
-                System.out.println("- Various currency pairs: EUR/USD, GBP/USD, USD/JPY, EUR/GBP, USD/CHF, AUD/USD, EUR/CHF");
-                System.out.println("- Different statuses: PENDING, CONFIRMED, SETTLED, CANCELLED");
-                System.out.println("- Both CALL and PUT options");
-                System.out.println("- Different notional amounts and maturities");
-            }
-        }
+    private void createSwaps(List<Counterparty> counterparties) {
+        List<Trade> swaps = List.of(
+            createFXSwap("FX-SWAP-001", counterparties.get(0)),
+            createCurrencySwap("CCY-SWAP-002", counterparties.get(1)),
+            createInterestRateSwap("IRS-001", counterparties.get(2))
+        );
+        tradeRepository.saveAll(swaps);
+    }
+
+    private Trade createFXSwap(String reference, Counterparty counterparty) {
+        Trade trade = new Trade();
+        trade.setTradeReference(reference);
+        trade.setCounterparty(counterparty);
+        trade.setProductType(ProductType.FX_SWAP);
+        trade.setSwapType(SwapType.FX_SWAP);
+        trade.setBaseCurrency("USD");
+        trade.setQuoteCurrency("EUR");
+        trade.setNotionalAmount(new BigDecimal("10000000"));
+        
+        // Near leg (spot)
+        trade.setNearLegDate(LocalDate.now().plusDays(2));
+        trade.setNearLegRate(new BigDecimal("1.1000"));
+        trade.setNearLegAmount(new BigDecimal("10000000"));
+        
+        // Far leg (forward)
+        trade.setFarLegDate(LocalDate.now().plusDays(32));
+        trade.setFarLegRate(new BigDecimal("1.1050"));
+        trade.setFarLegAmount(new BigDecimal("10000000"));
+        
+        trade.setTradeDate(LocalDate.now());
+        trade.setValueDate(LocalDate.now().plusDays(2));
+        trade.setMaturityDate(LocalDate.now().plusDays(32));
+        trade.setStatus(TradeStatus.CONFIRMED);
+        trade.setCreatedBy("trader2");
+        return trade;
+    }
+
+    private Trade createCurrencySwap(String reference, Counterparty counterparty) {
+        Trade trade = new Trade();
+        trade.setTradeReference(reference);
+        trade.setCounterparty(counterparty);
+        trade.setProductType(ProductType.CURRENCY_SWAP);
+        trade.setSwapType(SwapType.CURRENCY_SWAP);
+        trade.setBaseCurrency("USD");
+        trade.setQuoteCurrency("EUR");
+        trade.setNotionalAmount(new BigDecimal("50000000"));
+        trade.setFixedRate(new BigDecimal("3.50")); // USD fixed rate
+        trade.setFloatingRateIndex("EURIBOR");
+        trade.setPaymentFrequency("QUARTERLY");
+        trade.setTradeDate(LocalDate.now());
+        trade.setValueDate(LocalDate.now().plusDays(2));
+        trade.setMaturityDate(LocalDate.now().plusYears(5));
+        trade.setStatus(TradeStatus.CONFIRMED);
+        trade.setCreatedBy("trader1");
+        return trade;
+    }
+
+    private Trade createInterestRateSwap(String reference, Counterparty counterparty) {
+        Trade trade = new Trade();
+        trade.setTradeReference(reference);
+        trade.setCounterparty(counterparty);
+        trade.setProductType(ProductType.INTEREST_RATE_SWAP);
+        trade.setSwapType(SwapType.INTEREST_RATE_SWAP);
+        trade.setBaseCurrency("USD");
+        trade.setQuoteCurrency("USD");
+        trade.setNotionalAmount(new BigDecimal("25000000"));
+        trade.setFixedRate(new BigDecimal("4.25"));
+        trade.setFloatingRateIndex("SOFR");
+        trade.setPaymentFrequency("SEMI_ANNUAL");
+        trade.setTradeDate(LocalDate.now());
+        trade.setValueDate(LocalDate.now().plusDays(2));
+        trade.setMaturityDate(LocalDate.now().plusYears(10));
+        trade.setStatus(TradeStatus.CONFIRMED);
+        trade.setCreatedBy("trader2");
+        return trade;
     }
 }

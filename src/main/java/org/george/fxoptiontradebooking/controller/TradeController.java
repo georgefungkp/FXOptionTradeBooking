@@ -1,5 +1,6 @@
 package org.george.fxoptiontradebooking.controller;
 
+import io.micrometer.observation.annotation.Observed;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.trace.Span;
@@ -8,7 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.george.fxoptiontradebooking.dto.request.TradeBookingRequest;
 import org.george.fxoptiontradebooking.dto.response.ApiResponse;
 import org.george.fxoptiontradebooking.dto.response.TradeResponse;
-import org.george.fxoptiontradebooking.entity.TradeStatus;
+import org.george.fxoptiontradebooking.entity.*;
 import org.george.fxoptiontradebooking.service.TradeService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -16,32 +17,35 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-import io.micrometer.observation.annotation.Observed;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
- * REST controller for managing FX option trades.
- * Provides endpoints for booking, retrieving, updating, and cancelling trades.
- * Handles all trade lifecycle operations through a standardized API interface.
- * All responses are wrapped in a consistent ApiResponse format for unified error handling.
+ * REST controller for managing multi-product financial trades.
+ * Provides comprehensive endpoints for booking, retrieving, updating, and cancelling trades
+ * across various financial instruments including vanilla options, exotic options, 
+ * FX contracts, and swap products.
+ * 
+ * All responses are wrapped in a consistent ApiResponse format for unified error handling
+ * and include observability annotations for distributed tracing.
  */
 @RestController
-@RequestMapping("/api/trades")
+@RequestMapping("/api/v1/trades")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*") // Allows cross-origin requests for development and testing
+@CrossOrigin(origins = "*")
 public class TradeController {
     
-    /** Service for handling trade business logic operations */
     private final TradeService tradeService;
 
+    // ========================= CORE TRADE OPERATIONS =========================
+
     /**
-     * Books a new FX option trade in the system.
-     * Validates the request and creates a new trade record if validation passes.
+     * Books a new financial trade in the system.
+     * Supports multiple product types with comprehensive validation.
      * 
      * @param request The validated trade booking request containing all trade details
      * @return HTTP 201 Created with the newly booked trade data
-     * @throws org.george.fxoptiontradebooking.exception.BusinessValidationException if validation fails
      */
     @PostMapping
     @PreAuthorize("hasRole('TRADER') or hasRole('ADMIN')")
@@ -51,7 +55,7 @@ public class TradeController {
         lowCardinalityKeyValues = {
             "operation", "create",
             "resource", "trade",
-            "endpoint", "/api/trades",
+            "endpoint", "/api/v1/trades",
             "method", "POST"
         }
     )
@@ -63,10 +67,6 @@ public class TradeController {
 
     /**
      * Retrieves a trade by its unique ID.
-     * 
-     * @param tradeId The ID of the trade to retrieve
-     * @return HTTP 200 OK with the trade data if found
-     * @throws org.george.fxoptiontradebooking.exception.TradeNotFoundException if the trade doesn't exist
      */
     @GetMapping("/{tradeId}")
     @PreAuthorize("hasRole('USER') or hasRole('TRADER') or hasRole('ADMIN')")
@@ -77,11 +77,6 @@ public class TradeController {
     
     /**
      * Retrieves a trade by its unique reference number.
-     * 
-     * @param tradeReference The reference number of the trade to retrieve
-     * @return HTTP 200 OK with the trade data if found
-     * @throws org.george.fxoptiontradebooking.exception.TradeNotFoundException if the trade doesn't exist
-     * @throws org.george.fxoptiontradebooking.exception.BusinessValidationException if reference is invalid
      */
     @GetMapping("/reference/{tradeReference}")
     @PreAuthorize("hasRole('USER') or hasRole('TRADER') or hasRole('ADMIN')")
@@ -91,13 +86,42 @@ public class TradeController {
     }
 
     /**
+     * Retrieves all trades with pagination support.
+     */
+    @GetMapping
+    @PreAuthorize("hasRole('USER') or hasRole('TRADER') or hasRole('ADMIN')")
+    @Observed(name = "trade.list", contextualName = "get-all-trades-paginated")
+    public ResponseEntity<ApiResponse<Page<TradeResponse>>> getAllTrades(Pageable pageable) {
+        Page<TradeResponse> responses = tradeService.getAllTrades(pageable);
+        return ResponseEntity.ok(ApiResponse.success(responses));
+    }
+
+    /**
+     * Updates the status of an existing trade.
+     */
+    @PutMapping("/{tradeId}/status")
+    @PreAuthorize("hasRole('TRADER') or hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<TradeResponse>> updateTradeStatus(
+            @PathVariable Long tradeId, 
+            @RequestParam TradeStatus status) {
+        TradeResponse response = tradeService.updateTradeStatus(tradeId, status);
+        return ResponseEntity.ok(ApiResponse.success("Trade status updated successfully", response));
+    }
+
+    /**
+     * Cancels an existing trade.
+     */
+    @DeleteMapping("/{tradeId}")
+    @PreAuthorize("hasRole('TRADER') or hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<Object>> cancelTrade(@PathVariable Long tradeId) {
+        tradeService.cancelTrade(tradeId);
+        return ResponseEntity.ok(ApiResponse.success("Trade cancelled successfully", null));
+    }
+
+    // ========================= COUNTERPARTY QUERIES =========================
+
+    /**
      * Retrieves all trades for a specific counterparty.
-     * 
-     * Access: TRADER and ADMIN roles only (sensitive counterparty data)
-     * 
-     * @param counterpartyId The ID of the counterparty to filter trades by
-     * @return HTTP 200 OK with a list of trades for the specified counterparty
-     * @throws org.george.fxoptiontradebooking.exception.TradeNotFoundException if the counterparty doesn't exist
      */
     @GetMapping("/counterparty/{counterpartyId}")
     @PreAuthorize("hasRole('TRADER') or hasRole('ADMIN')")
@@ -106,14 +130,10 @@ public class TradeController {
         return ResponseEntity.ok(ApiResponse.success(responses));
     }
 
+    // ========================= STATUS QUERIES =========================
+
     /**
      * Retrieves all trades with a specific status.
-     * 
-     * Access: USER, TRADER and ADMIN roles
-     * 
-     * @param status The trade status to filter by
-     * @return HTTP 200 OK with a list of trades with the specified status
-     * @throws org.george.fxoptiontradebooking.exception.BusinessValidationException if status is invalid
      */
     @GetMapping("/status/{status}")
     @PreAuthorize("hasRole('USER') or hasRole('TRADER') or hasRole('ADMIN')")
@@ -122,76 +142,143 @@ public class TradeController {
         return ResponseEntity.ok(ApiResponse.success(responses));
     }
 
+    // ========================= FX CONTRACT QUERIES =========================
+
     /**
-     * Retrieves all trades with pagination support.
-     * 
-     * Access: USER, TRADER and ADMIN roles
-     * 
-     * @param pageable Pagination parameters (page, size, sort)
-     * @return HTTP 200 OK with a page of trades according to pagination parameters
+     * Retrieves all FX contracts (forwards and spots).
      */
-    @GetMapping
-    @Observed(
-        name = "trade.list",
-        contextualName = "get-all-trades-paginated",
-        lowCardinalityKeyValues = {
-        "operation", "read",
-        "resource", "trade",
-        "endpoint", "/api/trades",
-        "method", "GET",
-        "type", "paginated"
-        }
-    )
+    @GetMapping("/fx-contracts")
     @PreAuthorize("hasRole('USER') or hasRole('TRADER') or hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<Page<TradeResponse>>> getAllTrades(Pageable pageable) {
-        Span currentSpan = Span.current();
-        if (currentSpan.getSpanContext().isValid()) {
-            currentSpan.setAllAttributes(Attributes.of(
-                AttributeKey.longKey("page.number"), (long) pageable.getPageNumber(),
-                AttributeKey.longKey("page.size"), (long) pageable.getPageSize(),
-                AttributeKey.stringKey("page.sort"), pageable.getSort().toString()
-            ));
-        }
-        Page<TradeResponse> responses = tradeService.getAllTrades(pageable);
+    public ResponseEntity<ApiResponse<List<TradeResponse>>> getAllFXContracts() {
+        List<TradeResponse> responses = tradeService.getAllFXContracts();
         return ResponseEntity.ok(ApiResponse.success(responses));
     }
 
     /**
-     * Updates the status of an existing trade.
-     * Status transitions are validated according to business rules.
-     * 
-     * Access: TRADER and ADMIN roles only (critical trade operation)
-     * 
-     * @param tradeId The ID of the trade to update
-     * @param status The new status to set
-     * @return HTTP 200 OK with the updated trade data
-     * @throws org.george.fxoptiontradebooking.exception.TradeNotFoundException if the trade doesn't exist
-     * @throws org.george.fxoptiontradebooking.exception.BusinessValidationException if the status transition is invalid
+     * Retrieves FX forwards maturing between specified dates.
      */
-    @PutMapping("/{tradeId}/status")
+    @GetMapping("/fx-forwards/maturing")
     @PreAuthorize("hasRole('TRADER') or hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<TradeResponse>> updateTradeStatus(
-            @PathVariable Long tradeId, 
-            @RequestParam TradeStatus status) {
-        TradeResponse response = tradeService.updateTradeStatus(tradeId, status);
-        return ResponseEntity.ok(ApiResponse.success("Trade status updated", response));
+    public ResponseEntity<ApiResponse<List<TradeResponse>>> getFXForwardsMaturing(
+            @RequestParam LocalDate startDate,
+            @RequestParam LocalDate endDate) {
+        List<TradeResponse> responses = tradeService.getFXForwardsMaturing(startDate, endDate);
+        return ResponseEntity.ok(ApiResponse.success(responses));
+    }
+
+    // ========================= SWAP QUERIES =========================
+
+    /**
+     * Retrieves all swap products.
+     */
+    @GetMapping("/swaps")
+    @PreAuthorize("hasRole('USER') or hasRole('TRADER') or hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<List<TradeResponse>>> getAllSwaps() {
+        List<TradeResponse> responses = tradeService.getAllSwaps();
+        return ResponseEntity.ok(ApiResponse.success(responses));
     }
 
     /**
-     * Cancels an existing trade.
-     * Only trades in PENDING status and on the same business day can be cancelled.
-     * 
-     * Access: TRADER and ADMIN roles only (critical trade operation)
-     * 
-     * @param tradeId The ID of the trade to cancel
-     * @return HTTP 200 OK with cancellation confirmation
-     * @throws org.george.fxoptiontradebooking.exception.TradeNotFoundException if the trade doesn't exist
-     * @throws org.george.fxoptiontradebooking.exception.BusinessValidationException if the trade cannot be cancelled
+     * Retrieves swaps by type.
      */
-    @DeleteMapping("/{tradeId}")
+    @GetMapping("/swaps/{swapType}")
     @PreAuthorize("hasRole('TRADER') or hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<Object>> cancelTrade(@PathVariable Long tradeId) {
-        tradeService.cancelTrade(tradeId);
-        return ResponseEntity.ok(ApiResponse.success("Trade cancelled successfully", null));
+    public ResponseEntity<ApiResponse<List<TradeResponse>>> getSwapsByType(@PathVariable SwapType swapType) {
+        List<TradeResponse> responses = tradeService.getSwapsByType(swapType);
+        return ResponseEntity.ok(ApiResponse.success(responses));
+    }
+
+    /**
+     * Retrieves interest rate swaps by floating rate index.
+     */
+    @GetMapping("/swaps/interest-rate/index/{index}")
+    @PreAuthorize("hasRole('TRADER') or hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<List<TradeResponse>>> getInterestRateSwapsByIndex(@PathVariable String index) {
+        List<TradeResponse> responses = tradeService.getInterestRateSwapsByIndex(index);
+        return ResponseEntity.ok(ApiResponse.success(responses));
+    }
+
+    // ========================= OPTION QUERIES =========================
+
+    /**
+     * Retrieves vanilla options expiring between specified dates.
+     */
+    @GetMapping("/options/vanilla/expiring")
+    @PreAuthorize("hasRole('TRADER') or hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<List<TradeResponse>>> getVanillaOptionsExpiringBetween(
+            @RequestParam LocalDate startDate,
+            @RequestParam LocalDate endDate) {
+        List<TradeResponse> responses = tradeService.getVanillaOptionsExpiringBetween(startDate, endDate);
+        return ResponseEntity.ok(ApiResponse.success(responses));
+    }
+
+    /**
+     * Retrieves exotic options by type.
+     */
+    @GetMapping("/options/exotic/{exoticType}")
+    @PreAuthorize("hasRole('TRADER') or hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<List<TradeResponse>>> getExoticOptionsByType(@PathVariable ExoticOptionType exoticType) {
+        List<TradeResponse> responses = tradeService.getExoticOptionsByType(exoticType);
+        return ResponseEntity.ok(ApiResponse.success(responses));
+    }
+
+    // ========================= PRODUCT TYPE QUERIES =========================
+
+    /**
+     * Retrieves trades by product type.
+     */
+    @GetMapping("/product-type/{productType}")
+    @PreAuthorize("hasRole('USER') or hasRole('TRADER') or hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<List<TradeResponse>>> getTradesByProductType(@PathVariable ProductType productType) {
+        List<TradeResponse> responses = tradeService.getTradesByProductType(productType);
+        return ResponseEntity.ok(ApiResponse.success(responses));
+    }
+
+    /**
+     * Retrieves trades by product type with pagination.
+     */
+    @GetMapping("/product-type/{productType}/paginated")
+    @PreAuthorize("hasRole('USER') or hasRole('TRADER') or hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<Page<TradeResponse>>> getTradesByProductTypePaginated(
+            @PathVariable ProductType productType, 
+            Pageable pageable) {
+        Page<TradeResponse> responses = tradeService.getTradesByProductTypePaginated(productType, pageable);
+        return ResponseEntity.ok(ApiResponse.success(responses));
+    }
+
+    // ========================= CURRENCY QUERIES =========================
+
+    /**
+     * Retrieves trades by currency.
+     */
+    @GetMapping("/currency/{currency}")
+    @PreAuthorize("hasRole('TRADER') or hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<List<TradeResponse>>> getTradesByCurrency(@PathVariable String currency) {
+        List<TradeResponse> responses = tradeService.getTradesByCurrency(currency);
+        return ResponseEntity.ok(ApiResponse.success(responses));
+    }
+
+    /**
+     * Retrieves trades by date range.
+     */
+    @GetMapping("/date-range")
+    @PreAuthorize("hasRole('TRADER') or hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<List<TradeResponse>>> getTradesByDateRange(
+            @RequestParam LocalDate startDate,
+            @RequestParam LocalDate endDate) {
+        List<TradeResponse> responses = tradeService.getTradesByDateRange(startDate, endDate);
+        return ResponseEntity.ok(ApiResponse.success(responses));
+    }
+
+    /**
+     * Retrieves trades by counterparty with pagination.
+     */
+    @GetMapping("/counterparty/{counterpartyId}/paginated")
+    @PreAuthorize("hasRole('TRADER') or hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<Page<TradeResponse>>> getTradesByCounterpartyPaginated(
+            @PathVariable Long counterpartyId, 
+            Pageable pageable) {
+        Page<TradeResponse> responses = tradeService.getTradesByCounterpartyPaginated(counterpartyId, pageable);
+        return ResponseEntity.ok(ApiResponse.success(responses));
     }
 }
