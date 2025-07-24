@@ -2,6 +2,8 @@
 
 A comprehensive Spring Boot application designed for managing Foreign Exchange (FX) and derivative trade bookings in investment banking and financial services. This system provides secure, scalable, and robust trade management capabilities with enterprise-grade features and comprehensive observability.
 
+Products include **FX Spot, Vanilla/Exotic Options, Forward Contracts & Swaps**
+
 ## Developer Information
 
 **Name:** George Fung
