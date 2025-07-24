@@ -24,6 +24,7 @@ import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -40,10 +41,16 @@ class TradeServiceImplTest {
     private TradeRepository tradeRepository;
 
     @Mock
-    private CounterpartyRepository counterpartyRepository;
+    private org.george.fxoptiontradebooking.service.impl.TradeValidationService tradeValidationService;
 
     @Mock
-    private ValidationService validationService;
+    private TradeFactoryService tradeFactoryService;
+
+    @Mock
+    private TradeBusinessLogicService tradeBusinessLogicService;
+
+    @Mock
+    private TradeQueryService tradeQueryService;
 
     @Mock
     private ModelMapper modelMapper;
@@ -72,11 +79,16 @@ class TradeServiceImplTest {
         @DisplayName("Should book trade successfully")
         void shouldBookTradeSuccessfully() {
             // Given
-            when(counterpartyRepository.findById(anyLong())).thenReturn(Optional.of(validCounterparty));
-            when(tradeRepository.findByTradeReference(anyString())).thenReturn(Optional.empty());
-            when(tradeRepository.save(any(Trade.class))).thenReturn(validTrade);
+            when(tradeValidationService.validateAndGetCounterparty(anyLong())).thenReturn(validCounterparty);
+            when(tradeFactoryService.createTradeEntity(any(TradeBookingRequest.class), any(Counterparty.class))).thenReturn(validTrade);
+            when(tradeBusinessLogicService.saveTradeWithAudit(any(Trade.class))).thenReturn(validTrade);
             when(modelMapper.map(any(Trade.class), eq(TradeResponse.class))).thenReturn(validResponse);
-            doNothing().when(validationService).validateTradeRequest(any());
+            
+            doNothing().when(tradeValidationService).performPreTradeValidation(any());
+            doNothing().when(tradeValidationService).validateCounterpartyEligibility(any());
+            doNothing().when(tradeValidationService).validateUniqueTradeReference(any());
+            doNothing().when(tradeBusinessLogicService).applyBusinessLogic(any(), any());
+            doNothing().when(tradeBusinessLogicService).performPostTradeProcessing(any());
 
             // When
             TradeResponse result = tradeService.bookTrade(validRequest);
@@ -84,9 +96,15 @@ class TradeServiceImplTest {
             // Then
             assertNotNull(result);
             assertEquals(validResponse.getTradeReference(), result.getTradeReference());
-            verify(validationService).validateTradeRequest(validRequest);
-            verify(counterpartyRepository).findById(validRequest.getCounterpartyId());
-            verify(tradeRepository).save(any(Trade.class));
+            
+            verify(tradeValidationService).performPreTradeValidation(validRequest);
+            verify(tradeValidationService).validateAndGetCounterparty(validRequest.getCounterpartyId());
+            verify(tradeValidationService).validateCounterpartyEligibility(validCounterparty);
+            verify(tradeValidationService).validateUniqueTradeReference(validRequest.getTradeReference());
+            verify(tradeFactoryService).createTradeEntity(validRequest, validCounterparty);
+            verify(tradeBusinessLogicService).applyBusinessLogic(validTrade, validRequest);
+            verify(tradeBusinessLogicService).saveTradeWithAudit(validTrade);
+            verify(tradeBusinessLogicService).performPostTradeProcessing(validTrade);
         }
 
         @Test
@@ -101,13 +119,29 @@ class TradeServiceImplTest {
         }
 
         @Test
+        @DisplayName("Should throw exception for validation failure")
+        void shouldThrowExceptionForValidationFailure() {
+            // Given
+            doThrow(new BusinessValidationException("Validation failed"))
+                .when(tradeValidationService).performPreTradeValidation(any());
+
+            // When & Then
+            BusinessValidationException exception = assertThrows(
+                BusinessValidationException.class,
+                () -> tradeService.bookTrade(validRequest)
+            );
+            assertEquals("Validation failed", exception.getMessage());
+        }
+
+        @Test
         @DisplayName("Should throw exception for non-existent counterparty")
         void shouldThrowExceptionForNonExistentCounterparty() {
             // Given
-            when(counterpartyRepository.findById(anyLong())).thenReturn(Optional.empty());
-            doNothing().when(validationService).validateTradeRequest(any());
+            doNothing().when(tradeValidationService).performPreTradeValidation(any());
+            when(tradeValidationService.validateAndGetCounterparty(anyLong()))
+                .thenThrow(new TradeNotFoundException("Counterparty not found with ID: 1"));
 
-            // When & Then - Fix: Expecting TradeNotFoundException instead of BusinessValidationException
+            // When & Then
             TradeNotFoundException exception = assertThrows(
                 TradeNotFoundException.class,
                 () -> tradeService.bookTrade(validRequest)
@@ -119,9 +153,10 @@ class TradeServiceImplTest {
         @DisplayName("Should throw exception for inactive counterparty")
         void shouldThrowExceptionForInactiveCounterparty() {
             // Given
-            validCounterparty.setIsActive(false);
-            when(counterpartyRepository.findById(anyLong())).thenReturn(Optional.of(validCounterparty));
-            doNothing().when(validationService).validateTradeRequest(any());
+            doNothing().when(tradeValidationService).performPreTradeValidation(any());
+            when(tradeValidationService.validateAndGetCounterparty(anyLong())).thenReturn(validCounterparty);
+            doThrow(new BusinessValidationException("Cannot trade with inactive counterparty: Test Counterparty"))
+                .when(tradeValidationService).validateCounterpartyEligibility(any());
 
             // When & Then
             BusinessValidationException exception = assertThrows(
@@ -134,10 +169,12 @@ class TradeServiceImplTest {
         @Test
         @DisplayName("Should throw exception for duplicate trade reference")
         void shouldThrowExceptionForDuplicateTradeReference() {
-            // Given - Set up all necessary mocks to reach the duplicate check
-            when(counterpartyRepository.findById(anyLong())).thenReturn(Optional.of(validCounterparty));
-            when(tradeRepository.findByTradeReference(anyString())).thenReturn(Optional.of(validTrade));
-            doNothing().when(validationService).validateTradeRequest(any());
+            // Given
+            doNothing().when(tradeValidationService).performPreTradeValidation(any());
+            when(tradeValidationService.validateAndGetCounterparty(anyLong())).thenReturn(validCounterparty);
+            doNothing().when(tradeValidationService).validateCounterpartyEligibility(any());
+            doThrow(new BusinessValidationException("Trade reference already exists: TRD-001"))
+                .when(tradeValidationService).validateUniqueTradeReference(any());
 
             // When & Then
             BusinessValidationException exception = assertThrows(
@@ -146,32 +183,80 @@ class TradeServiceImplTest {
             );
             assertTrue(exception.getMessage().contains("Trade reference already exists"));
         }
+
+        @Test
+        @DisplayName("Should handle unexpected exception")
+        void shouldHandleUnexpectedException() {
+            // Given
+            doNothing().when(tradeValidationService).performPreTradeValidation(any());
+            when(tradeValidationService.validateAndGetCounterparty(anyLong())).thenReturn(validCounterparty);
+            doNothing().when(tradeValidationService).validateCounterpartyEligibility(any());
+            doNothing().when(tradeValidationService).validateUniqueTradeReference(any());
+            when(tradeFactoryService.createTradeEntity(any(), any()))
+                .thenThrow(new RuntimeException("Unexpected error"));
+
+            // When & Then
+            BusinessValidationException exception = assertThrows(
+                BusinessValidationException.class,
+                () -> tradeService.bookTrade(validRequest)
+            );
+            assertEquals("Trade booking failed due to unexpected error", exception.getMessage());
+        }
     }
 
     @Nested
-    @DisplayName("Get Trade Tests")
-    class GetTradeTests {
+    @DisplayName("Update Trade Status Tests")
+    class UpdateTradeStatusTests {
 
         @Test
-        @DisplayName("Should get trade by ID successfully")
-        void shouldGetTradeByIdSuccessfully() {
+        @DisplayName("Should update trade status successfully")
+        void shouldUpdateTradeStatusSuccessfully() {
             // Given
             Long tradeId = 1L;
+            TradeStatus newStatus = TradeStatus.CONFIRMED;
+            validTrade.setStatus(TradeStatus.PENDING);
+            
             when(tradeRepository.findById(tradeId)).thenReturn(Optional.of(validTrade));
-            when(modelMapper.map(validTrade, TradeResponse.class)).thenReturn(validResponse);
+            when(tradeRepository.save(any(Trade.class))).thenReturn(validTrade);
+            when(modelMapper.map(any(Trade.class), eq(TradeResponse.class))).thenReturn(validResponse);
+            doNothing().when(tradeValidationService).validateStatusTransition(any(), any());
+            doNothing().when(tradeBusinessLogicService).handleStatusChangeEvents(any(), any(), any());
 
             // When
-            TradeResponse result = tradeService.getTradeById(tradeId);
+            TradeResponse result = tradeService.updateTradeStatus(tradeId, newStatus);
 
             // Then
             assertNotNull(result);
-            assertEquals(validResponse.getTradeReference(), result.getTradeReference());
-            verify(tradeRepository).findById(tradeId);
+            verify(tradeValidationService).validateStatusTransition(TradeStatus.PENDING, newStatus);
+            verify(tradeRepository).save(validTrade);
+            verify(tradeBusinessLogicService).handleStatusChangeEvents(validTrade, TradeStatus.PENDING, newStatus);
         }
 
         @Test
-        @DisplayName("Should throw exception when trade not found by ID")
-        void shouldThrowExceptionWhenTradeNotFoundById() {
+        @DisplayName("Should throw exception for invalid trade ID")
+        void shouldThrowExceptionForInvalidTradeId() {
+            // When & Then
+            BusinessValidationException exception = assertThrows(
+                BusinessValidationException.class,
+                () -> tradeService.updateTradeStatus(null, TradeStatus.CONFIRMED)
+            );
+            assertEquals("Trade ID must be a positive number", exception.getMessage());
+        }
+
+        @Test
+        @DisplayName("Should throw exception for null status")
+        void shouldThrowExceptionForNullStatus() {
+            // When & Then
+            BusinessValidationException exception = assertThrows(
+                BusinessValidationException.class,
+                () -> tradeService.updateTradeStatus(1L, null)
+            );
+            assertEquals("New status cannot be null", exception.getMessage());
+        }
+
+        @Test
+        @DisplayName("Should throw exception when trade not found")
+        void shouldThrowExceptionWhenTradeNotFound() {
             // Given
             Long tradeId = 999L;
             when(tradeRepository.findById(tradeId)).thenReturn(Optional.empty());
@@ -179,9 +264,166 @@ class TradeServiceImplTest {
             // When & Then
             TradeNotFoundException exception = assertThrows(
                 TradeNotFoundException.class,
-                () -> tradeService.getTradeById(tradeId)
+                () -> tradeService.updateTradeStatus(tradeId, TradeStatus.CONFIRMED)
             );
             assertEquals("Trade not found with ID: " + tradeId, exception.getMessage());
+        }
+    }
+
+    @Nested
+    @DisplayName("Cancel Trade Tests")
+    class CancelTradeTests {
+
+        @Test
+        @DisplayName("Should cancel trade successfully")
+        void shouldCancelTradeSuccessfully() {
+            // Given
+            Long tradeId = 1L;
+            validTrade.setStatus(TradeStatus.PENDING);
+            validTrade.setTradeDate(LocalDate.now());
+            
+            when(tradeRepository.findById(tradeId)).thenReturn(Optional.of(validTrade));
+            when(tradeRepository.save(any(Trade.class))).thenReturn(validTrade);
+            doNothing().when(tradeValidationService).validateTradeForCancellation(any());
+
+            // When
+            tradeService.cancelTrade(tradeId);
+
+            // Then
+            verify(tradeValidationService).validateTradeForCancellation(validTrade);
+            verify(tradeRepository).save(validTrade);
+            assertEquals(TradeStatus.CANCELLED, validTrade.getStatus());
+        }
+
+        @Test
+        @DisplayName("Should throw exception for invalid trade ID")
+        void shouldThrowExceptionForInvalidTradeId() {
+            // When & Then
+            BusinessValidationException exception = assertThrows(
+                BusinessValidationException.class,
+                () -> tradeService.cancelTrade(null)
+            );
+            assertEquals("Trade ID must be a positive number", exception.getMessage());
+        }
+
+        @Test
+        @DisplayName("Should throw exception when trade not found")
+        void shouldThrowExceptionWhenTradeNotFound() {
+            // Given
+            Long tradeId = 999L;
+            when(tradeRepository.findById(tradeId)).thenReturn(Optional.empty());
+
+            // When & Then
+            TradeNotFoundException exception = assertThrows(
+                TradeNotFoundException.class,
+                () -> tradeService.cancelTrade(tradeId)
+            );
+            assertEquals("Trade not found with ID: " + tradeId, exception.getMessage());
+        }
+
+        @Test
+        @DisplayName("Should throw exception for validation failure")
+        void shouldThrowExceptionForValidationFailure() {
+            // Given
+            Long tradeId = 1L;
+            when(tradeRepository.findById(tradeId)).thenReturn(Optional.of(validTrade));
+            doThrow(new BusinessValidationException("Only PENDING trades can be cancelled"))
+                .when(tradeValidationService).validateTradeForCancellation(any());
+
+            // When & Then
+            BusinessValidationException exception = assertThrows(
+                BusinessValidationException.class,
+                () -> tradeService.cancelTrade(tradeId)
+            );
+            assertEquals("Only PENDING trades can be cancelled", exception.getMessage());
+        }
+    }
+
+    @Nested
+    @DisplayName("Query Delegation Tests")
+    class QueryDelegationTests {
+
+        @Test
+        @DisplayName("Should delegate getTradeById to TradeQueryService")
+        void shouldDelegateGetTradeById() {
+            // Given
+            Long tradeId = 1L;
+            when(tradeQueryService.getTradeById(tradeId)).thenReturn(validResponse);
+
+            // When
+            TradeResponse result = tradeService.getTradeById(tradeId);
+
+            // Then
+            assertNotNull(result);
+            assertEquals(validResponse.getTradeReference(), result.getTradeReference());
+            verify(tradeQueryService).getTradeById(tradeId);
+        }
+
+        @Test
+        @DisplayName("Should delegate getTradeByReference to TradeQueryService")
+        void shouldDelegateGetTradeByReference() {
+            // Given
+            String tradeReference = "TRD-001";
+            when(tradeQueryService.getTradeByReference(tradeReference)).thenReturn(validResponse);
+
+            // When
+            TradeResponse result = tradeService.getTradeByReference(tradeReference);
+
+            // Then
+            assertNotNull(result);
+            assertEquals(validResponse.getTradeReference(), result.getTradeReference());
+            verify(tradeQueryService).getTradeByReference(tradeReference);
+        }
+
+        @Test
+        @DisplayName("Should delegate getTradesByCounterparty to TradeQueryService")
+        void shouldDelegateGetTradesByCounterparty() {
+            // Given
+            Long counterpartyId = 1L;
+            List<TradeResponse> expectedTrades = Arrays.asList(validResponse);
+            when(tradeQueryService.getTradesByCounterparty(counterpartyId)).thenReturn(expectedTrades);
+
+            // When
+            List<TradeResponse> result = tradeService.getTradesByCounterparty(counterpartyId);
+
+            // Then
+            assertNotNull(result);
+            assertEquals(1, result.size());
+            verify(tradeQueryService).getTradesByCounterparty(counterpartyId);
+        }
+
+        @Test
+        @DisplayName("Should delegate getTradesByStatus to TradeQueryService")
+        void shouldDelegateGetTradesByStatus() {
+            // Given
+            TradeStatus status = TradeStatus.PENDING;
+            List<TradeResponse> expectedTrades = Arrays.asList(validResponse);
+            when(tradeQueryService.getTradesByStatus(status)).thenReturn(expectedTrades);
+
+            // When
+            List<TradeResponse> result = tradeService.getTradesByStatus(status);
+
+            // Then
+            assertNotNull(result);
+            assertEquals(1, result.size());
+            verify(tradeQueryService).getTradesByStatus(status);
+        }
+
+        @Test
+        @DisplayName("Should delegate getAllTrades to TradeQueryService")
+        void shouldDelegateGetAllTrades() {
+            // Given
+            Pageable pageable = PageRequest.of(0, 10);
+            Page<TradeResponse> expectedPage = new PageImpl<>(Arrays.asList(validResponse));
+            when(tradeQueryService.getAllTrades(pageable)).thenReturn(expectedPage);
+
+            // When
+            Page<TradeResponse> result = tradeService.getAllTrades(pageable);
+
+            // Then
+            assertNotNull(result);
+            assertEquals(1, result.getContent().size());
+            verify(tradeQueryService).getAllTrades(pageable);
         }
     }
 
@@ -189,6 +431,7 @@ class TradeServiceImplTest {
         TradeBookingRequest request = new TradeBookingRequest();
         request.setTradeReference("TRD-001");
         request.setCounterpartyId(1L);
+        request.setProductType(ProductType.VANILLA_OPTION);
         request.setBaseCurrency("EUR");
         request.setQuoteCurrency("USD");
         request.setNotionalAmount(new BigDecimal("100000.00"));
@@ -207,6 +450,7 @@ class TradeServiceImplTest {
         trade.setTradeId(1L);
         trade.setTradeReference("TRD-001");
         trade.setCounterparty(createValidCounterparty());
+        trade.setProductType(ProductType.VANILLA_OPTION);
         trade.setBaseCurrency("EUR");
         trade.setQuoteCurrency("USD");
         trade.setNotionalAmount(new BigDecimal("100000.00"));
@@ -218,6 +462,8 @@ class TradeServiceImplTest {
         trade.setOptionType(OptionType.CALL);
         trade.setStatus(TradeStatus.PENDING);
         trade.setCreatedBy("TEST_USER");
+        trade.setCreatedAt(LocalDateTime.now());
+        trade.setUpdatedAt(LocalDateTime.now());
         return trade;
     }
 
@@ -225,6 +471,7 @@ class TradeServiceImplTest {
         TradeResponse response = new TradeResponse();
         response.setTradeId(1L);
         response.setTradeReference("TRD-001");
+        response.setProductType(ProductType.VANILLA_OPTION);
         response.setBaseCurrency("EUR");
         response.setQuoteCurrency("USD");
         response.setNotionalAmount(new BigDecimal("100000.00"));
